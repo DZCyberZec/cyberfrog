@@ -10,18 +10,9 @@ async fn main() -> cyberfrog_lib::crawler::CrawlResult<()> {
     let _ = std::fs::remove_file(&out);
 
     let t0 = std::time::Instant::now();
-    let written = crawl(
-        Config {
-            start,
-            concurrency: 8,
-            max_urls: 10_000,
-            check_external: true,
-            check_images: true,
-            use_sitemaps: true,
-        },
-        &out,
-        |p| eprint!("\r{} URL, {} in coda   ", p.done, p.pending),
-    )
+    let written = crawl(Config::new(start), &out, |p| {
+        eprint!("\r{} URL, {} in coda   ", p.done, p.pending)
+    })
     .await?;
     eprintln!();
     println!(

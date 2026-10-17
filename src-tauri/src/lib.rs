@@ -4,6 +4,7 @@ pub mod report;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use regex::Regex;
 use tauri::Manager;
 use tauri::ipc::Channel;
 use url::Url;
@@ -11,10 +12,52 @@ use url::Url;
 use crawler::{Config, Page, Progress};
 use report::{BrokenLink, ExternalLink, ImageRow, ImageUse, PageLinks};
 
-// shortcut: fixed limits, expose them in the UI when crawl settings land
-const CONCURRENCY: usize = 8;
-const MAX_URLS: usize = 10_000;
 const RECENT_LIMIT: usize = 15;
+const MAX_URLS_LIMIT: usize = 100_000;
+const MAX_CONCURRENCY: usize = 32;
+
+/// Crawl settings from the UI's settings dialog; mirrors `Settings` in src/App.tsx.
+#[derive(serde::Deserialize)]
+struct Settings {
+    max_urls: usize,
+    concurrency: usize,
+    user_agent: String,
+    respect_robots: bool,
+    check_external: bool,
+    check_images: bool,
+    use_sitemaps: bool,
+    /// Regular expressions, one per entry; blank entries are ignored.
+    exclude: Vec<String>,
+}
+
+/// Turns UI settings into a crawler config, clamping limits and rejecting bad patterns.
+fn config(start: Url, s: Settings) -> Result<Config, String> {
+    let exclude = s
+        .exclude
+        .iter()
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            Regex::new(p).map_err(|e| format!("Pattern di esclusione non valido \"{p}\": {e}"))
+        })
+        .collect::<Result<_, _>>()?;
+    let user_agent = s.user_agent.trim();
+    Ok(Config {
+        max_urls: s.max_urls.clamp(1, MAX_URLS_LIMIT),
+        concurrency: s.concurrency.clamp(1, MAX_CONCURRENCY),
+        user_agent: if user_agent.is_empty() {
+            crawler::USER_AGENT.to_owned()
+        } else {
+            user_agent.to_owned()
+        },
+        respect_robots: s.respect_robots,
+        check_external: s.check_external,
+        check_images: s.check_images,
+        use_sitemaps: s.use_sitemaps,
+        exclude,
+        ..Config::new(start)
+    })
+}
 
 /// A crawl file and its pages, as shown in the UI.
 #[derive(serde::Serialize)]
@@ -61,6 +104,7 @@ fn load(path: &Path) -> Result<CrawlData, String> {
 async fn start_crawl(
     app: tauri::AppHandle,
     url: String,
+    settings: Settings,
     on_progress: Channel<Progress>,
 ) -> Result<CrawlData, String> {
     let start = Url::parse(url.trim()).map_err(|e| format!("URL non valido: {e}"))?;
@@ -73,14 +117,7 @@ async fn start_crawl(
         .as_millis();
     let db_path = crawls_dir(&app)?.join(format!("crawl-{stamp}.sqlite"));
 
-    let cfg = Config {
-        start,
-        concurrency: CONCURRENCY,
-        max_urls: MAX_URLS,
-        check_external: true,
-        check_images: true,
-        use_sitemaps: true,
-    };
+    let cfg = config(start, settings)?;
     crawler::crawl(cfg, &db_path, |p| {
         let _ = on_progress.send(p); // a closed window just stops listening
     })
@@ -163,4 +200,39 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn settings(exclude: &[&str]) -> Settings {
+        Settings {
+            max_urls: 0,
+            concurrency: 500,
+            user_agent: "  ".into(),
+            respect_robots: false,
+            check_external: false,
+            check_images: true,
+            use_sitemaps: false,
+            exclude: exclude.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn settings_are_clamped_defaulted_and_validated() {
+        let start = Url::parse("https://s.it/").unwrap();
+        let cfg = config(start.clone(), settings(&["/tag/", "  ", "\\?replytocom="])).unwrap();
+        assert_eq!((cfg.max_urls, cfg.concurrency), (1, MAX_CONCURRENCY));
+        assert_eq!(
+            cfg.user_agent,
+            crawler::USER_AGENT,
+            "blank user agent falls back to the default"
+        );
+        assert_eq!(cfg.exclude.len(), 2, "blank patterns are ignored");
+        assert!(!cfg.respect_robots && cfg.check_images && !cfg.use_sitemaps);
+
+        let err = config(start, settings(&["(unclosed"])).err().unwrap();
+        assert!(err.contains("(unclosed"), "{err}");
+    }
 }

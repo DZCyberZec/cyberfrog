@@ -6,6 +6,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use regex::Regex;
 use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE, LOCATION};
 use reqwest::{Client, redirect::Policy};
 use rusqlite::{Connection, OpenFlags, params};
@@ -15,7 +16,17 @@ use tokio::task::JoinSet;
 use url::Url;
 
 pub const USER_AGENT: &str = "CyberFrog/0.1";
-const ROBOTS_AGENT: &str = "CyberFrog";
+
+/// The product token robots.txt groups are matched on: "Googlebot" for
+/// "Mozilla/5.0 (compatible; Googlebot/2.1; ...)", "CyberFrog" for "CyberFrog/0.1".
+fn robots_token(user_agent: &str) -> &str {
+    let compatible = user_agent.split("compatible;").nth(1).unwrap_or(user_agent);
+    compatible
+        .trim_start()
+        .split(['/', ' ', ';', ')'])
+        .find(|t| !t.is_empty())
+        .unwrap_or(user_agent)
+}
 
 pub type CrawlResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -30,6 +41,29 @@ pub struct Config {
     pub check_images: bool,
     /// Read the XML sitemaps (from robots.txt, else /sitemap.xml) and also crawl URLs found only there.
     pub use_sitemaps: bool,
+    /// Sent with every request and matched against robots.txt groups.
+    pub user_agent: String,
+    /// When false, robots.txt disallow rules are reported but not obeyed.
+    pub respect_robots: bool,
+    /// Discovered URLs matching any of these are skipped (the start URL never is).
+    pub exclude: Vec<Regex>,
+}
+
+impl Config {
+    /// Defaults matching the app's settings dialog.
+    pub fn new(start: Url) -> Self {
+        Config {
+            start,
+            concurrency: 8,
+            max_urls: 10_000,
+            check_external: true,
+            check_images: true,
+            use_sitemaps: true,
+            user_agent: USER_AGENT.to_owned(),
+            respect_robots: true,
+            exclude: Vec::new(),
+        }
+    }
 }
 
 /// Link depth from the start URL; `None` for URLs reached only through a sitemap.
@@ -275,16 +309,16 @@ pub async fn crawl(
     mut on_progress: impl FnMut(Progress) + Send,
 ) -> CrawlResult<usize> {
     let client = Client::builder()
-        .user_agent(USER_AGENT)
+        .user_agent(&cfg.user_agent)
         .redirect(Policy::none()) // redirects are recorded as rows, their targets queued
         .timeout(Duration::from_secs(20))
         .build()?;
     // robots.txt and sitemaps may redirect (http -> https, www), so they follow redirects
     let follow = Client::builder()
-        .user_agent(USER_AGENT)
+        .user_agent(&cfg.user_agent)
         .timeout(Duration::from_secs(20))
         .build()?;
-    let robot = load_robots(&follow, &cfg.start).await;
+    let robot = load_robots(&follow, &cfg.start, &cfg.user_agent).await;
     let mut db = open_db(db_path)?;
     let concurrency = cfg.concurrency.max(1);
 
@@ -314,7 +348,7 @@ pub async fn crawl(
         while tasks.len() < concurrency
             && let Some((url, depth)) = queue.pop_front()
         {
-            if robot.as_ref().is_some_and(|r| !r.allowed(url.as_str())) {
+            if cfg.respect_robots && robot.as_ref().is_some_and(|r| !r.allowed(url.as_str())) {
                 db.execute(
                     "INSERT OR IGNORE INTO pages (url, depth, blocked_by_robots) VALUES (?1, ?2, 1)",
                     params![url.as_str(), depth],
@@ -333,6 +367,7 @@ pub async fn crawl(
         let Some(joined) = tasks.join_next().await else {
             for url in sitemap_seed.take().into_iter().flatten() {
                 if same_site(&url, &cfg.start)
+                    && !excluded(&cfg, &url)
                     && seen.len() < cfg.max_urls
                     && seen.insert(url.to_string())
                 {
@@ -423,7 +458,8 @@ pub async fn crawl(
             .into_iter()
             .chain(internal.into_iter().map(|l| l.url))
         {
-            if seen.len() < cfg.max_urls && seen.insert(link.to_string()) {
+            if !excluded(&cfg, &link) && seen.len() < cfg.max_urls && seen.insert(link.to_string())
+            {
                 queue.push_back((link, page.depth.map(|d| d + 1)));
             }
         }
@@ -621,6 +657,10 @@ async fn status_of(
     }
 }
 
+fn excluded(cfg: &Config, url: &Url) -> bool {
+    cfg.exclude.iter().any(|re| re.is_match(url.as_str()))
+}
+
 fn normalize(mut url: Url) -> Url {
     url.set_fragment(None);
     url
@@ -632,7 +672,7 @@ fn same_site(url: &Url, start: &Url) -> bool {
 }
 
 /// `None` means everything is allowed.
-async fn load_robots(client: &Client, start: &Url) -> Option<Robot> {
+async fn load_robots(client: &Client, start: &Url, user_agent: &str) -> Option<Robot> {
     let resp = client
         .get(start.join("/robots.txt").ok()?)
         .send()
@@ -643,7 +683,7 @@ async fn load_robots(client: &Client, start: &Url) -> Option<Robot> {
         return None;
     }
     let body = resp.bytes().await.ok()?;
-    Robot::new(ROBOTS_AGENT, &body).ok()
+    Robot::new(robots_token(user_agent), &body).ok()
 }
 
 /// Every `<loc>` in the site's sitemaps, with the sitemap file listing it. Sitemap indexes are
@@ -974,12 +1014,12 @@ mod tests {
         let base = serve().await;
         let path = db_path("full");
         let cfg = Config {
-            start: base.clone(),
             concurrency: 4,
             max_urls: 100,
             check_external: false,
             check_images: false,
             use_sitemaps: false,
+            ..Config::new(base.clone())
         };
 
         let mut progress = Vec::new();
@@ -1044,12 +1084,12 @@ mod tests {
         let base = serve().await;
         let path = db_path("orig");
         let cfg = Config {
-            start: base.clone(),
             concurrency: 4,
             max_urls: 100,
             check_external: false,
             check_images: false,
             use_sitemaps: false,
+            ..Config::new(base.clone())
         };
         crawl(cfg, &path, |_| {}).await.unwrap();
 
@@ -1178,12 +1218,12 @@ mod tests {
         .await;
         let path = db_path("external");
         let cfg = Config {
-            start: site.clone(),
             concurrency: 4,
             max_urls: 100,
             check_external: true,
             check_images: false,
             use_sitemaps: false,
+            ..Config::new(site.clone())
         };
         let mut progress = Vec::new();
         crawl(cfg, &path, |p| progress.push(p)).await.unwrap();
@@ -1300,12 +1340,12 @@ mod tests {
         .await;
         let path = db_path("images");
         let cfg = Config {
-            start: site.clone(),
             concurrency: 4,
             max_urls: 100,
             check_external: false,
             check_images: true,
             use_sitemaps: false,
+            ..Config::new(site.clone())
         };
         let mut progress = Vec::new();
         crawl(cfg, &path, |p| progress.push(p)).await.unwrap();
@@ -1413,12 +1453,12 @@ mod tests {
 
         let path = db_path("sitemap");
         let cfg = Config {
-            start: site.clone(),
             concurrency: 4,
             max_urls: 100,
             check_external: false,
             check_images: false,
             use_sitemaps: true,
+            ..Config::new(site.clone())
         };
         crawl(cfg, &path, |_| {}).await.unwrap();
 
@@ -1456,16 +1496,73 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn exclude_patterns_and_ignoring_robots() {
+        let base = serve().await;
+        let u = |p: &str| base.join(p).unwrap().to_string();
+
+        let path = db_path("exclude");
+        let cfg = Config {
+            check_external: false,
+            check_images: false,
+            use_sitemaps: false,
+            exclude: vec![Regex::new("/(old|missing)$").unwrap()],
+            ..Config::new(base.clone())
+        };
+        crawl(cfg, &path, |_| {}).await.unwrap();
+        let urls: Vec<String> = rows(&path).into_iter().map(|r| r.0).collect();
+        assert_eq!(
+            urls,
+            vec![u("/"), u("/a"), u("/private/x")],
+            "excluded URLs and what only they lead to are skipped"
+        );
+
+        let path = db_path("no-robots");
+        let cfg = Config {
+            check_external: false,
+            check_images: false,
+            use_sitemaps: false,
+            respect_robots: false,
+            ..Config::new(base.clone())
+        };
+        crawl(cfg, &path, |_| {}).await.unwrap();
+        let private = rows(&path)
+            .into_iter()
+            .find(|r| r.0 == u("/private/x"))
+            .unwrap();
+        assert_eq!(
+            (private.2, private.4),
+            (Some(404), false),
+            "fetched instead of blocked"
+        );
+    }
+
+    #[test]
+    fn robots_token_comes_from_the_product_name() {
+        assert_eq!(robots_token("CyberFrog/0.1"), "CyberFrog");
+        assert_eq!(
+            robots_token(
+                "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+            ),
+            "Googlebot"
+        );
+        assert_eq!(
+            robots_token("Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"),
+            "bingbot"
+        );
+        assert_eq!(robots_token("MyCrawler"), "MyCrawler");
+    }
+
+    #[tokio::test]
     async fn stops_at_max_urls() {
         let base = serve().await;
         let path = db_path("limit");
         let cfg = Config {
-            start: base,
             concurrency: 2,
             max_urls: 2,
             check_external: false,
             check_images: false,
             use_sitemaps: false,
+            ..Config::new(base)
         };
 
         assert_eq!(crawl(cfg, &path, |_| {}).await.unwrap(), 2);

@@ -4,6 +4,8 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { DataTable, helperFor } from "./DataTable";
 import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
+import { SettingsDialog } from "./SettingsDialog";
+import { loadSettings, saveSettings, type Settings } from "./settings";
 import {
   BROKEN_FILTERS,
   CHECKS,
@@ -214,6 +216,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>("internal");
+  const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const refreshRecent = useCallback(() => {
     invoke<CrawlSummary[]>("list_crawls").then(setRecent, () => setRecent([]));
@@ -242,7 +246,7 @@ export default function App() {
     onProgress.onmessage = setProgress;
     const t0 = performance.now();
     try {
-      show(await invoke<CrawlData>("start_crawl", { url, onProgress }));
+      show(await invoke<CrawlData>("start_crawl", { url, settings, onProgress }));
       setElapsed((performance.now() - t0) / 1000);
       refreshRecent();
     } catch (err) {
@@ -335,6 +339,9 @@ export default function App() {
           </button>
         </form>
         <div className="file-actions">
+          <button type="button" className="ghost" onClick={() => setSettingsOpen(true)} disabled={running}>
+            Impostazioni
+          </button>
           <button type="button" className="ghost" onClick={() => openCrawl()} disabled={running}>
             Apri…
           </button>
@@ -344,6 +351,16 @@ export default function App() {
         </div>
       </header>
       <div className={`progress ${running ? "on" : ""}`} aria-hidden />
+      <SettingsDialog
+        open={settingsOpen}
+        settings={settings}
+        onSave={(s) => {
+          setSettings(s);
+          saveSettings(s);
+          setSettingsOpen(false);
+        }}
+        onClose={() => setSettingsOpen(false)}
+      />
 
       {error && (
         <p className="error" role="alert">

@@ -218,3 +218,31 @@ button { font: inherit; }
 .badge.blocked, .badge.none { color: var(--blocked); background: var(--blocked-bg); }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Settings dialog */
+dialog.settings {
+  width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0;
+  color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.25);
+}
+dialog.settings::backdrop { background: rgb(0 0 0 / 0.35); }
+dialog.settings form { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+dialog.settings h2 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+dialog.settings fieldset { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+dialog.settings legend { padding: 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+dialog.settings label { display: flex; flex-direction: column; gap: 4px; font-weight: 500; }
+dialog.settings label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
+dialog.settings small { color: var(--muted); font-weight: 400; }
+dialog.settings input[type="number"], dialog.settings input[type="text"], dialog.settings select, dialog.settings textarea {
+  padding: 7px 10px; font: inherit; color: var(--text); background: var(--sunken);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+dialog.settings textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; resize: vertical; }
+dialog.settings input:focus, dialog.settings select:focus, dialog.settings textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+dialog.settings footer { display: flex; align-items: center; gap: 8px; }
+dialog.settings footer .spacer { flex: 1; }
+dialog.settings button { padding: 7px 14px; border-radius: var(--radius); cursor: pointer; font-weight: 600; }
+dialog.settings button.primary { color: var(--accent-text); background: var(--accent); border: 0; }
+dialog.settings button.primary:hover { background: var(--accent-hover); }
+dialog.settings button.secondary { color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); }
+dialog.settings button.link { padding: 7px 0; color: var(--muted); background: none; border: 0; font-weight: 500; text-decoration: underline; }

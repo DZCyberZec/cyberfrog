@@ -1,5 +1,6 @@
 import { LOCALE, tr } from "./i18n.ts";
 import { EMPTY_GEO, geoFilters, geoRows, type GeoData } from "./geo.ts";
+import { EMPTY_TOPICS, TOPIC_FILTERS, topicFindings, type TopicsData } from "./topics.ts";
 
 /** Mirrors `crawler::Page` in src-tauri/src/crawler.rs. */
 export type Page = {
@@ -563,6 +564,8 @@ export const ISSUES: IssueDef[] = [
   { tab: "js", filter: "js-content", priority: "Bassa", label: tr("Contenuto visibile solo dopo il rendering JavaScript"), fix: tr("Rendi il contenuto principale lato server (SSR o pre-rendering) perché tutti i motori lo leggano subito.") },
   { tab: "js", filter: "errors", priority: "Bassa", label: tr("Pagine non renderizzate"), fix: tr("Il browser non ha completato il rendering: controlla errori JavaScript e tempi di caricamento.") },
   { tab: "geo", filter: "blocked-search", priority: "Alta", label: tr("Pagine chiuse ai motori di ricerca AI"), fix: tr("Consenti in robots.txt i bot di ricerca AI (OAI-SearchBot, ChatGPT-User, Claude-SearchBot, PerplexityBot): senza, le pagine non compaiono nelle risposte di ChatGPT, Claude e Perplexity.") },
+  { tab: "topics", filter: "cannibal", priority: "Media", label: tr("Pagine in cannibalizzazione"), fix: tr("Due pagine puntano alla stessa ricerca: unisci i contenuti, differenzia title e H1, oppure indica la principale con un canonical.") },
+  { tab: "topics", filter: "links", priority: "Bassa", label: tr("Link interni da aggiungere"), fix: tr("Collega le pagine dello stesso argomento al loro hub e viceversa, con il testo del link suggerito.") },
   { tab: "geo", filter: "js-invisible", priority: "Media", label: tr("Contenuto invisibile ai crawler AI"), fix: tr("I crawler AI non eseguono JavaScript: rendi il contenuto lato server (SSR o pre-rendering).") },
   { tab: "geo", filter: "low", priority: "Media", label: tr("Citabilità AI bassa"), fix: tr("Apri il report GEO: per ogni pagina mostra cosa aggiungere perché un'AI la citi.") },
   { tab: "geo", filter: "no-answer", priority: "Bassa", label: tr("Senza risposta in apertura"), fix: tr("Apri la pagina con un paragrafo di 20–80 parole che risponde subito alla domanda principale.") },
@@ -633,6 +636,7 @@ export type CrawlSnapshot = {
   bad_links: BadLinkRow[];
   /** Missing in crawl files saved before GEO data existed. */
   geo?: GeoData;
+  topics?: TopicsData;
 };
 
 /** Every issue of a crawl. Pass `dups` from dupPages() to include duplicate content (it is costly). */
@@ -666,6 +670,7 @@ function crawlReports(d: CrawlSnapshot, dups: DupPage[]): Reports {
   const geo = d.geo ?? EMPTY_GEO;
   return {
     geo: { rows: geoRows(d.pages, geo, d.structured), filters: geoFilters(geo) },
+    topics: { rows: topicFindings(d.topics ?? EMPTY_TOPICS), filters: TOPIC_FILTERS },
     codes: { rows: d.pages, filters: CODE_FILTERS },
     index: { rows: d.pages, filters: indexFilters(d.pages) },
     broken: { rows: d.broken, filters: BROKEN_FILTERS },

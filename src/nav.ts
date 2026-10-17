@@ -19,6 +19,7 @@ export type Tab =
   | "sitemap"
   | "perf"
   | "geo"
+  | "topics"
   | "js"
   | "hreflang"
   | "schema"
@@ -54,6 +55,7 @@ export const GROUPS: { label: string; items: { id: Tab; label: string }[] }[] = 
   {
     label: tr("Contenuti"),
     items: [
+      { id: "topics", label: tr("Argomenti e link") },
       ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
       { id: "schema", label: tr("Dati strutturati") },
       { id: "hreflang", label: tr("Hreflang") },

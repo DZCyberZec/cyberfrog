@@ -4,6 +4,7 @@ import { DataTable, helperFor } from "./DataTable";
 import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
 import { GeoReport } from "./GeoReport";
+import { TopicsReport } from "./TopicsReport";
 import { SiteStructure } from "./SiteStructure";
 import { Overview } from "./Overview";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
@@ -313,6 +314,9 @@ export function Reports(p: Props) {
           exportName={name("geo")}
           {...byUrl}
         />
+      )}
+      {tab === "topics" && (
+        <TopicsReport key={k("topics")} initialFilter={initial("topics")} topics={crawl.topics} exportName={name("argomenti")} selected={selected} select={select} />
       )}
       {tab === "js" && (
         <DataTable

@@ -18,10 +18,10 @@ export type Analysis = ReturnType<typeof useAnalysis>;
 
 /** `withDups` turns on the pairwise duplicate check, which is costly on big crawls. */
 export function useAnalysis(crawl: CrawlData, withDups: boolean) {
-  const { pages, broken, images, hreflang, structured, bad_links, geo } = crawl;
+  const { pages, broken, images, hreflang, structured, bad_links, geo, topics } = crawl;
   const snapshot = useMemo(
-    (): CrawlSnapshot => ({ pages, broken, images, hreflang, structured, bad_links, geo }),
-    [pages, broken, images, hreflang, structured, bad_links, geo],
+    (): CrawlSnapshot => ({ pages, broken, images, hreflang, structured, bad_links, geo, topics }),
+    [pages, broken, images, hreflang, structured, bad_links, geo, topics],
   );
   const dupRows = useMemo(() => (withDups ? dupPages(pages) : []), [pages, withDups]);
   const issues = useMemo(() => allIssues(snapshot, dupRows), [snapshot, dupRows]);

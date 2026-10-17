@@ -1,6 +1,7 @@
 // The crawl as the backend returns it, plus the progress and history types around it.
 import { tr } from "./i18n";
 import { EMPTY_GEO, type GeoData } from "./geo";
+import { EMPTY_TOPICS, type TopicsData } from "./topics";
 import type {
   BadLinkRow,
   BrokenLink,
@@ -24,6 +25,7 @@ export type CrawlData = {
   bad_links: BadLinkRow[];
   custom: CustomData;
   geo: GeoData;
+  topics: TopicsData;
 };
 
 /** No crawl loaded: the start screen shows. */
@@ -38,6 +40,7 @@ export const EMPTY_CRAWL: CrawlData = {
   bad_links: [],
   custom: { rules: [], values: [] },
   geo: EMPTY_GEO,
+  topics: EMPTY_TOPICS,
 };
 
 /** Mirrors `CrawlSummary` in src-tauri/src/lib.rs. */

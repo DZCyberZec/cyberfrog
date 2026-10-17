@@ -12,6 +12,7 @@ const { hasTranslation } = await import("../src/i18n.ts");
 const { pageIssues, withExamples } = await import("../src/pages.ts");
 const { systemPrompt, metaPrompt, explainPrompt, planPrompt } = await import("../src/ai.ts");
 const { healthScore } = await import("../src/health.ts");
+const { TOPIC_FILTERS, topicFindings, REASON_LABEL } = await import("../src/topics.ts");
 const { EMPTY_GEO, geoFilters, geoRows, botState, CITABILITY, PURPOSE_LABEL } = await import("../src/geo.ts");
 
 const base: Page = {
@@ -219,14 +220,15 @@ const tabsWithFilters: Record<string, string[]> = {
   h1: metaFilters(CHECKS[2]).map((f) => f.id), images: IMAGE_FILTERS.map((f) => f.id), perf: PERF_FILTERS.map((f) => f.id),
   sitemap: SITEMAP_FILTERS.map((f) => f.id), schema: schemaFilters([]).map((f) => f.id), hreflang: HREFLANG_FILTERS.map((f) => f.id),
   duplicates: DUP_FILTERS.map((f) => f.id), badlinks: BAD_LINK_FILTERS.map((f) => f.id),
-  redirects: REDIRECT_FILTERS.map((f) => f.id), js: JS_FILTERS.map((f) => f.id), geo: geoFilters(EMPTY_GEO).map((f) => f.id),
+  redirects: REDIRECT_FILTERS.map((f) => f.id), js: JS_FILTERS.map((f) => f.id), geo: geoFilters(EMPTY_GEO).map((f) => f.id), topics: TOPIC_FILTERS.map((f) => f.id),
 };
 for (const d of ISSUES) assert.ok(tabsWithFilters[d.tab]?.includes(d.filter), `issue ${d.label} points to a real filter`);
 const labels = [
   ...ISSUES.flatMap((d) => [d.label, d.fix, d.priority]),
   ...[CODE_FILTERS, BROKEN_FILTERS, CHANGE_FILTERS, REDIRECT_FILTERS, BAD_LINK_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, JS_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
-      indexFilters([]), schemaFilters([]), geoFilters(EMPTY_GEO), CITABILITY, ...CHECKS.map(metaFilters)].flat().map((f) => f.label),
+      indexFilters([]), schemaFilters([]), geoFilters(EMPTY_GEO), CITABILITY, TOPIC_FILTERS, ...CHECKS.map(metaFilters)].flat().map((f) => f.label),
   ...Object.values(PURPOSE_LABEL),
+  ...Object.values(REASON_LABEL),
   // llms.txt problems come from Rust in Italian
   "È una pagina HTML, non un file Markdown", "Manca il titolo (# Nome del sito) nella prima riga", "Manca il riassunto (riga che inizia con >)", "Nessun link alle pagine importanti",
 ];
@@ -380,4 +382,11 @@ assert.equal(healthScore([], 100), 100);
 assert.equal(healthScore([issue("Alta", 100)], 100), 70, "a high issue on every page costs its full weight");
 assert.equal(healthScore([issue("Media", 1)], 100), 99, "one page in a hundred costs a little");
 assert.equal(healthScore([issue("Alta", 100), issue("Alta", 100), issue("Alta", 100), issue("Alta", 100)], 100), 0, "never below 0");
+const tf = topicFindings({
+  analysed: 4,
+  clusters: [],
+  cannibal: [{ a: "/x", b: "/y", similarity: 0.5, title_similarity: 0.8, shared: [] }, { a: "/x", b: "/z", similarity: 0.4, title_similarity: 0.6, shared: [] }],
+  suggestions: [{ from: "/x", to: "/w", similarity: 0.4, anchor: "W", reason: "related" }],
+});
+assert.deepEqual(tf, [{ url: "/x", kind: "cannibal" }, { url: "/y", kind: "cannibal" }, { url: "/z", kind: "cannibal" }, { url: "/w", kind: "links" }], "a page in two pairs counts once");
 console.log("pages.check: ok");

@@ -5,11 +5,12 @@ import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
 import { GeoReport } from "./GeoReport";
 import { TopicsReport } from "./TopicsReport";
+import { CompetitorReport } from "./CompetitorReport";
 import { SiteStructure } from "./SiteStructure";
 import { Overview } from "./Overview";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
 import { planPrompt } from "./ai";
-import type { AiEngine } from "./settings";
+import type { Settings } from "./settings";
 import type { CrawlData, CrawlSummary } from "./crawl";
 import type { Analysis } from "./useAnalysis";
 import type { Tab } from "./nav";
@@ -77,7 +78,7 @@ type Props = {
   baselineData: CrawlSnapshot | null;
   setBaseline: (path: string | null) => void;
   recent: CrawlSummary[];
-  aiEngine: AiEngine;
+  settings: Settings;
   aiReady: boolean;
   onSaveSitemap: () => void;
 };
@@ -88,7 +89,7 @@ export function Reports(p: Props) {
   const { tab, jump, crawl, a, selected, select } = p;
   const { pages, path } = crawl;
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const plan = useAi(p.aiEngine);
+  const plan = useAi(p.settings.ai_engine);
   const resetPlan = plan.reset;
   useEffect(resetPlan, [pages, resetPlan]); // a plan belongs to the crawl it was written for
   useEffect(() => setSelectedImage(null), [pages]);
@@ -315,6 +316,18 @@ export function Reports(p: Props) {
           {...byUrl}
         />
       )}
+      {tab === "competitor" && (
+        <CompetitorReport
+          crawl={crawl}
+          recent={p.recent}
+          settings={p.settings}
+          aiReady={p.aiReady}
+          onOpenPage={(url) => {
+            select(url);
+            p.go("internal");
+          }}
+        />
+      )}
       {tab === "topics" && (
         <TopicsReport key={k("topics")} initialFilter={initial("topics")} topics={crawl.topics} exportName={name("argomenti")} selected={selected} select={select} />
       )}
@@ -357,13 +370,13 @@ export function Reports(p: Props) {
           }}
         />
       )}
-      {tab !== "images" && tab !== "overview" && selected && path && (
+      {tab !== "images" && tab !== "overview" && tab !== "competitor" && selected && path && (
         <DetailPanel
           crawlPath={path}
           url={selected}
           page={selectedPage}
           issues={selectedIssues}
-          aiEngine={p.aiEngine}
+          aiEngine={p.settings.ai_engine}
           aiReady={p.aiReady}
           onClose={() => select(null)}
           onNavigate={select}

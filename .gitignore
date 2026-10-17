@@ -27,3 +27,6 @@ dist-ssr
 .impeccable
 *.sqlite
 *.sqlite-*
+
+# Agent worktrees
+.claude/worktrees/

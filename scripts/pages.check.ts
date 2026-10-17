@@ -13,6 +13,7 @@ const { pageIssues, withExamples } = await import("../src/pages.ts");
 const { systemPrompt, metaPrompt, explainPrompt, planPrompt } = await import("../src/ai.ts");
 const { healthScore } = await import("../src/health.ts");
 const { TOPIC_FILTERS, topicFindings, REASON_LABEL } = await import("../src/topics.ts");
+const { summarize, metricRows, competitorActions } = await import("../src/competitor.ts");
 const { EMPTY_GEO, geoFilters, geoRows, botState, CITABILITY, PURPOSE_LABEL } = await import("../src/geo.ts");
 
 const base: Page = {
@@ -389,4 +390,26 @@ const tf = topicFindings({
   suggestions: [{ from: "/x", to: "/w", similarity: 0.4, anchor: "W", reason: "related" }],
 });
 assert.deepEqual(tf, [{ url: "/x", kind: "cannibal" }, { url: "/y", kind: "cannibal" }, { url: "/z", kind: "cannibal" }, { url: "/w", kind: "links" }], "a page in two pairs counts once");
+const compSite = (host: string, words: number, author: boolean, blocked: string[]) => {
+  const pages: Page[] = [1, 2].map((i) => ({ ...base, url: `https://${host}/p${i}`, status: 200, content_type: "text/html", word_count: words, meta_description: "x", title: `T${i}`, h1: `H${i}` }));
+  return {
+    ...snap(pages),
+    geo: {
+      ...EMPTY_GEO,
+      bots: [{ token: "OAI-SearchBot", owner: "OpenAI", purpose: "search" as const, blocked_pages: blocked.length ? 2 : 0 }],
+      pages: pages.map((p) => ({ ...sig, page: p.url, has_author: author, blocked_bots: blocked })),
+    },
+  };
+};
+const me = summarize(compSite("me.it", 300, false, ["OAI-SearchBot"]));
+const them = summarize(compSite("them.it", 900, true, []));
+assert.deepEqual([me.host, me.indexable, me.avgWords, me.withAuthor, me.aiSearchBlocked], ["me.it", 2, 300, 0, true]);
+const mr = metricRows(me, them);
+assert.equal(mr.find((r) => r.label === "Parole medie per pagina")?.winner, "theirs");
+assert.equal(mr.find((r) => r.label === "Con meta description")?.winner, "tie");
+const acts = competitorActions(me, them, { mine_pages: 2, theirs_pages: 2, mine_covered: 1, gaps: [{ label: ["ads", "google"], pages: [{ url: "x", title: "Ads", words: 500 }, { url: "y", title: "Ads 2", words: 400 }] }], strengths: [], deeper: [] });
+assert.equal(acts[0].priority, "Alta");
+assert.ok(acts[0].text.includes("robots.txt"), "a closed door to AI search comes first");
+assert.ok(acts.some((a) => a.area === "Contenuti" && a.text.includes("ads, google")));
+assert.ok(acts.some((a) => a.text.includes("autore e data")));
 console.log("pages.check: ok");

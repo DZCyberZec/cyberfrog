@@ -332,7 +332,7 @@ export default function App() {
             baselineData={baselineData}
             setBaseline={setBaseline}
             recent={recent}
-            aiEngine={settings.ai_engine}
+            settings={settings}
             aiReady={isAiReady(settings.ai_engine, aiStatus)}
             onSaveSitemap={saveSitemap}
           />

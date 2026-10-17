@@ -8,7 +8,7 @@ use rusqlite::types::ValueRef;
 use serde_json::{Value, json};
 use url::Url;
 
-use crate::crawler::{self, Config};
+use crate::crawler::{self, Config, CustomRule};
 use crate::report;
 
 const PROTOCOL_VERSION: &str = "2025-06-18";
@@ -93,7 +93,17 @@ fn tools() -> Value {
                 "url": {"type": "string", "description": "Start URL, http:// or https://"},
                 "max_urls": {"type": "integer", "description": "URL limit, default 500, max 10000"},
                 "check_external": {"type": "boolean", "description": "Also check external links (slower). Default false."},
-                "check_images": {"type": "boolean", "description": "Also check image size and status (slower). Default false."}
+                "check_images": {"type": "boolean", "description": "Also check image size and status (slower). Default false."},
+                "rules": {"type": "array", "description": "Custom extraction/search rules; results land in the custom table", "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "kind": {"type": "string", "enum": ["css", "regex", "search"], "description": "css: element text or attr; regex: first group; search: count of a literal text"},
+                        "expr": {"type": "string"},
+                        "attr": {"type": "string", "description": "For css: read this attribute instead of the text"}
+                    },
+                    "required": ["name", "kind", "expr"]
+                }}
             }, "required": ["url"]}
         },
         {
@@ -177,7 +187,23 @@ async fn crawl_site(args: &Value, dir: &Path) -> Result<Value, String> {
             (n as usize).clamp(1, MAX_MCP_URLS)
         });
     let flag = |key: &str| args.get(key).and_then(Value::as_bool).unwrap_or(false);
+    let rules = args
+        .get("rules")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|r| {
+            let s = |k: &str| r.get(k).and_then(Value::as_str);
+            CustomRule::new(
+                s("name").unwrap_or_default(),
+                s("kind").unwrap_or_default(),
+                s("expr").unwrap_or_default(),
+                s("attr"),
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let cfg = Config {
+        rules: std::sync::Arc::new(rules),
         max_urls,
         check_external: flag("check_external"),
         check_images: flag("check_images"),

@@ -27,6 +27,8 @@
 - **Structured data**: JSON-LD (including `@graph`) and microdata types, invalid JSON, missing properties Google requires for common rich results.
 - **Duplicate content**: exact duplicates and near duplicates (SimHash, ≥ 90% similar) on the main content, plus low-content pages.
 - **Crawl comparison**: compares each crawl with the previous one of the same site — new and removed pages, status and indexability changes, changed titles, meta descriptions, H1 and canonicals, and how each issue moved.
+- **Custom extraction and search**: pull any value from every page with a CSS selector (text or attribute) or a regex — authors, prices, GA4 IDs — or check which pages contain or lack a piece of text or code.
+- **Redirect chains**: every redirect followed to its final URL, with chains, loops and non-200 destinations.
 - **Uncrawlable links**: links search engines may not follow (JavaScript navigation, `href` outside `<a>`) and invalid URLs.
 - **AI assistants**: a built-in MCP server lets Claude and other assistants run crawls and query the data.
 - **Export and reuse**: CSV export of any view (Excel-friendly), crawls saved as single SQLite files you can save, reopen and query.
@@ -84,7 +86,7 @@ claude mcp add cyberfrog -- /Applications/CyberFrog.app/Contents/MacOS/cyberfrog
 
 | Tool | What it does |
 |---|---|
-| `crawl_site` | Crawls a site (default limit 500 URLs) and returns an SEO summary |
+| `crawl_site` | Crawls a site (default limit 500 URLs) and returns an SEO summary; optional custom extraction/search rules |
 | `list_crawls` | Lists saved crawls, newest first |
 | `crawl_summary` | Status codes, indexability, title/meta/H1 problems, broken links, slow pages, images |
 | `query_crawl` | Runs a read-only SQL `SELECT` on a crawl (up to 200 rows) |

@@ -40,7 +40,21 @@
 
 **macOS (Apple silicon):** download the `.dmg` from the [Releases](../../releases) page and drag CyberFrog to Applications.
 
-The app isn't notarised by Apple yet. The first time you open it, right-click the app and choose **Open**.
+### First launch on macOS
+
+CyberFrog isn't notarised by Apple yet, so the first time macOS blocks it with *"Apple could not verify CyberFrog is free of malware"*. To allow it (once):
+
+1. Open CyberFrog from Applications. When the warning appears, click **Done**.
+2. Open **System Settings → Privacy & Security**, scroll to the **Security** section and click **Open Anyway** next to the CyberFrog message.
+3. Confirm with **Open Anyway** and your password or Touch ID.
+
+On macOS 14 (Sonoma) and earlier you can instead right-click the app and choose **Open**.
+
+Prefer the Terminal? This removes the download quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/CyberFrog.app
+```
 
 ## Build from source
 

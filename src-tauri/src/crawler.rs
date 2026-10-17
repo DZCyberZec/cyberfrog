@@ -139,7 +139,14 @@ fn apply_rules(doc: &Html, html: &str, rules: &[CustomRule]) -> Vec<(String, Str
                 .collect(),
             Matcher::Search(re) => vec![re.find_iter(html).count().to_string()],
         };
-        out.extend(values.into_iter().map(|v| (rule.name.clone(), v)));
+        // a value repeated on the page (e.g. an ID in two scripts) is listed once
+        let mut seen = HashSet::new();
+        out.extend(
+            values
+                .into_iter()
+                .filter(|v| seen.insert(v.clone()))
+                .map(|v| (rule.name.clone(), v)),
+        );
     }
     out
 }
@@ -1820,7 +1827,8 @@ mod tests {
     fn custom_rules_extract_values_and_count_matches() {
         let html = r#"<html><head><meta property="article:author" content=" Daniele Zecca ">
             <script async src="https://www.googletagmanager.com/gtag/js?id=G-ABC123"></script></head>
-            <body><span class="price">€ 49</span><span class="price">€ 99</span><span class="price"> </span></body></html>"#;
+            <body><span class="price">€ 49</span><span class="price">€ 99</span><span class="price">€ 49</span>
+            <span class="price"> </span></body></html>"#;
         let rules = [
             CustomRule::new("Prezzo", "css", ".price", None).unwrap(),
             CustomRule::new(
@@ -1842,7 +1850,7 @@ mod tests {
             pairs,
             [
                 ("Prezzo", "€ 49"),
-                ("Prezzo", "€ 99"), // the empty element yields nothing
+                ("Prezzo", "€ 99"), // the repeated € 49 and the empty element yield nothing
                 ("Autore", "Daniele Zecca"),
                 ("GA4 ID", "G-ABC123"),
                 ("GTM", "1"),

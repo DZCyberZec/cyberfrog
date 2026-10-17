@@ -12,9 +12,10 @@ use tauri::Manager;
 use tauri::ipc::Channel;
 use url::Url;
 
-use crawler::{Config, Page, Progress};
+use crawler::{Config, CustomRule, Page, Progress};
 use report::{
-    BadLinkRow, BrokenLink, ExternalLink, HreflangRow, ImageRow, ImageUse, PageLinks, StructuredRow,
+    BadLinkRow, BrokenLink, CustomData, ExternalLink, HreflangRow, ImageRow, ImageUse, PageLinks,
+    StructuredRow,
 };
 
 const RECENT_LIMIT: usize = 15;
@@ -33,6 +34,18 @@ struct Settings {
     use_sitemaps: bool,
     /// Regular expressions, one per entry; blank entries are ignored.
     exclude: Vec<String>,
+    /// Custom extraction and search rules; rows without a name or expression are ignored.
+    #[serde(default)]
+    rules: Vec<RuleSpec>,
+}
+
+#[derive(serde::Deserialize)]
+struct RuleSpec {
+    name: String,
+    /// "css", "regex" or "search".
+    kind: String,
+    expr: String,
+    attr: Option<String>,
 }
 
 /// Turns UI settings into a crawler config, clamping limits and rejecting bad patterns.
@@ -46,8 +59,22 @@ fn config(start: Url, s: Settings) -> Result<Config, String> {
             Regex::new(p).map_err(|e| format!("Pattern di esclusione non valido \"{p}\": {e}"))
         })
         .collect::<Result<_, _>>()?;
+    let mut names = std::collections::HashSet::new();
+    let rules = s
+        .rules
+        .iter()
+        .filter(|r| !r.name.trim().is_empty() && !r.expr.trim().is_empty())
+        .map(|r| {
+            let name = r.name.trim();
+            if !names.insert(name) {
+                return Err(format!("Regola \"{name}\" duplicata: usa nomi diversi"));
+            }
+            CustomRule::new(name, &r.kind, r.expr.trim(), r.attr.as_deref())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let user_agent = s.user_agent.trim();
     Ok(Config {
+        rules: Arc::new(rules),
         max_urls: s.max_urls.clamp(1, MAX_URLS_LIMIT),
         concurrency: s.concurrency.clamp(1, MAX_CONCURRENCY),
         user_agent: if user_agent.is_empty() {
@@ -75,6 +102,7 @@ struct CrawlData {
     hreflang: Vec<HreflangRow>,
     structured: Vec<StructuredRow>,
     bad_links: Vec<BadLinkRow>,
+    custom: CustomData,
 }
 
 #[derive(serde::Serialize)]
@@ -107,6 +135,7 @@ fn load(path: &Path) -> Result<CrawlData, String> {
         hreflang: report::read_hreflang(path).map_err(unreadable)?,
         structured: report::read_structured(path).map_err(unreadable)?,
         bad_links: report::read_bad_links(path).map_err(unreadable)?,
+        custom: report::read_custom(path).map_err(unreadable)?,
     })
 }
 
@@ -244,6 +273,7 @@ mod tests {
             check_images: true,
             use_sitemaps: false,
             exclude: exclude.iter().map(|s| s.to_string()).collect(),
+            rules: Vec::new(),
         }
     }
 
@@ -260,7 +290,36 @@ mod tests {
         assert_eq!(cfg.exclude.len(), 2, "blank patterns are ignored");
         assert!(!cfg.respect_robots && cfg.check_images && !cfg.use_sitemaps);
 
-        let err = config(start, settings(&["(unclosed"])).err().unwrap();
+        let err = config(start.clone(), settings(&["(unclosed"]))
+            .err()
+            .unwrap();
         assert!(err.contains("(unclosed"), "{err}");
+
+        let rule = |name: &str, kind: &str, expr: &str| RuleSpec {
+            name: name.into(),
+            kind: kind.into(),
+            expr: expr.into(),
+            attr: None,
+        };
+        let mut s = settings(&[]);
+        s.rules = vec![
+            rule("Autore", "css", ".author"),
+            rule("", "css", ".x"),
+            rule("GA4", "search", "G-"),
+        ];
+        let cfg = config(start.clone(), s).unwrap();
+        let names: Vec<&str> = cfg.rules.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["Autore", "GA4"], "unnamed rows are skipped");
+        let mut s = settings(&[]);
+        s.rules = vec![rule("A", "css", "div[")];
+        assert!(
+            config(start.clone(), s)
+                .err()
+                .unwrap()
+                .starts_with("Regola \"A\" non valida")
+        );
+        let mut s = settings(&[]);
+        s.rules = vec![rule("A", "css", "p"), rule("A", "regex", "x")];
+        assert!(config(start, s).err().unwrap().contains("duplicata"));
     }
 }

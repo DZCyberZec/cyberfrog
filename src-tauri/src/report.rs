@@ -296,3 +296,58 @@ pub fn read_bad_links(path: &Path) -> rusqlite::Result<Vec<BadLinkRow>> {
         })?
         .collect()
 }
+
+/// A custom rule as it was defined for a crawl.
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct CustomRuleRow {
+    pub name: String,
+    pub kind: String,
+    pub expr: String,
+    pub attr: Option<String>,
+}
+
+/// One value a rule produced on a page (a search rule's value is its match count).
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct CustomValue {
+    pub page: String,
+    pub rule: String,
+    pub value: String,
+}
+
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct CustomData {
+    pub rules: Vec<CustomRuleRow>,
+    pub values: Vec<CustomValue>,
+}
+
+pub fn read_custom(path: &Path) -> rusqlite::Result<CustomData> {
+    let db = open_existing(path)?;
+    if !compiles(&db, "SELECT 1 FROM custom_rules, custom LIMIT 0") {
+        return Ok(CustomData {
+            rules: Vec::new(),
+            values: Vec::new(),
+        });
+    }
+    let rules = db
+        .prepare("SELECT name, kind, expr, attr FROM custom_rules ORDER BY rowid")?
+        .query_map([], |r| {
+            Ok(CustomRuleRow {
+                name: r.get(0)?,
+                kind: r.get(1)?,
+                expr: r.get(2)?,
+                attr: r.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let values = db
+        .prepare("SELECT page, rule, value FROM custom ORDER BY page, rowid")?
+        .query_map([], |r| {
+            Ok(CustomValue {
+                page: r.get(0)?,
+                rule: r.get(1)?,
+                value: r.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(CustomData { rules, values })
+}

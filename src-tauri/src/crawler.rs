@@ -50,6 +50,98 @@ pub struct Config {
     pub exclude: Vec<Regex>,
     /// Set from elsewhere to end the crawl early; what was stored so far stays readable.
     pub stop: Arc<AtomicBool>,
+    /// Custom extraction and search rules applied to every HTML page.
+    pub rules: Arc<Vec<CustomRule>>,
+}
+
+/// A user rule applied to every HTML page: pull values out (CSS, regex) or count matches (search).
+#[derive(Clone, Debug)]
+pub struct CustomRule {
+    pub name: String,
+    /// The expression as the user wrote it.
+    pub expr: String,
+    pub matcher: Matcher,
+}
+
+#[derive(Clone, Debug)]
+pub enum Matcher {
+    /// Text of matching elements, or the given attribute.
+    Css {
+        selector: Selector,
+        attr: Option<String>,
+    },
+    /// First capture group, or the whole match, in the HTML source.
+    Regex(Regex),
+    /// How often the literal text appears in the HTML source; 0 means "doesn't contain".
+    Search(Regex),
+}
+
+/// At most this many values are kept per rule and page.
+const MAX_RULE_VALUES: usize = 10;
+
+impl CustomRule {
+    /// `kind` is "css", "regex" or "search"; errors name the rule and say what's wrong, in Italian like the UI.
+    pub fn new(name: &str, kind: &str, expr: &str, attr: Option<&str>) -> Result<Self, String> {
+        let bad = |e: String| format!("Regola \"{name}\" non valida: {e}");
+        let matcher = match kind {
+            "css" => Matcher::Css {
+                selector: Selector::parse(expr).map_err(|e| bad(e.to_string()))?,
+                attr: attr
+                    .map(str::trim)
+                    .filter(|a| !a.is_empty())
+                    .map(str::to_owned),
+            },
+            "regex" => Matcher::Regex(Regex::new(expr).map_err(|e| bad(e.to_string()))?),
+            "search" => {
+                Matcher::Search(Regex::new(&regex::escape(expr)).map_err(|e| bad(e.to_string()))?)
+            }
+            other => return Err(bad(format!("tipo sconosciuto {other}"))),
+        };
+        Ok(CustomRule {
+            name: name.to_owned(),
+            expr: expr.to_owned(),
+            matcher,
+        })
+    }
+
+    pub fn kind(&self) -> &'static str {
+        match self.matcher {
+            Matcher::Css { .. } => "css",
+            Matcher::Regex(_) => "regex",
+            Matcher::Search(_) => "search",
+        }
+    }
+}
+
+/// (rule name, value) pairs a page yields; a search rule always yields its match count.
+fn apply_rules(doc: &Html, html: &str, rules: &[CustomRule]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for rule in rules {
+        let values: Vec<String> = match &rule.matcher {
+            Matcher::Css { selector, attr } => doc
+                .select(selector)
+                .filter_map(|e| match attr {
+                    Some(a) => e.value().attr(a).map(|v| v.trim().to_owned()),
+                    None => squash(e.text()),
+                })
+                .filter(|v| !v.is_empty())
+                .take(MAX_RULE_VALUES)
+                .collect(),
+            Matcher::Regex(re) => re
+                .captures_iter(html)
+                .filter_map(|c| {
+                    c.get(1)
+                        .or_else(|| c.get(0))
+                        .map(|m| m.as_str().trim().to_owned())
+                })
+                .filter(|v| !v.is_empty())
+                .take(MAX_RULE_VALUES)
+                .collect(),
+            Matcher::Search(re) => vec![re.find_iter(html).count().to_string()],
+        };
+        out.extend(values.into_iter().map(|v| (rule.name.clone(), v)));
+    }
+    out
 }
 
 impl Config {
@@ -66,6 +158,7 @@ impl Config {
             respect_robots: true,
             exclude: Vec::new(),
             stop: Arc::default(),
+            rules: Arc::default(),
         }
     }
 }
@@ -104,6 +197,8 @@ struct HtmlData {
     simhash: Option<String>,
     links: Vec<Link>,
     images: Vec<Image>,
+    /// Custom rule results: (rule name, value).
+    custom: Vec<(String, String)>,
     /// `<link rel="alternate" hreflang>` annotations: (language code as written, target).
     hreflang: Vec<(String, Url)>,
     structured: Vec<Structured>,
@@ -312,6 +407,18 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              PRIMARY KEY (source, target)
          ) WITHOUT ROWID;
          CREATE INDEX IF NOT EXISTS links_target ON links (target);
+         CREATE TABLE IF NOT EXISTS custom_rules (
+             name TEXT PRIMARY KEY,
+             kind TEXT NOT NULL,
+             expr TEXT NOT NULL,
+             attr TEXT
+         );
+         CREATE TABLE IF NOT EXISTS custom (
+             page  TEXT NOT NULL,
+             rule  TEXT NOT NULL,
+             value TEXT NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS custom_page ON custom (page);
          CREATE TABLE IF NOT EXISTS bad_links (
              page   TEXT NOT NULL,
              kind   TEXT NOT NULL,
@@ -403,6 +510,16 @@ pub async fn crawl(
     let robot = load_robots(&follow, &cfg.start, &cfg.user_agent).await;
     let mut db = open_db(db_path)?;
     let concurrency = cfg.concurrency.max(1);
+    for rule in cfg.rules.iter() {
+        let attr = match &rule.matcher {
+            Matcher::Css { attr, .. } => attr.clone(),
+            _ => None,
+        };
+        db.execute(
+            "INSERT OR REPLACE INTO custom_rules (name, kind, expr, attr) VALUES (?1, ?2, ?3, ?4)",
+            params![rule.name, rule.kind(), rule.expr, attr],
+        )?;
+    }
 
     // URLs listed only in a sitemap are queued once link discovery runs dry
     let mut sitemap_seed = None;
@@ -446,7 +563,7 @@ pub async fn crawl(
                 });
                 continue;
             }
-            tasks.spawn(fetch(client.clone(), url, depth));
+            tasks.spawn(fetch(client.clone(), url, depth, cfg.rules.clone()));
         }
 
         let Some(joined) = tasks.join_next().await else {
@@ -516,6 +633,11 @@ pub async fn crawl(
                     link.anchor,
                     false
                 ])?;
+            }
+            let mut insert_custom =
+                tx.prepare_cached("INSERT INTO custom (page, rule, value) VALUES (?1, ?2, ?3)")?;
+            for (rule, value) in &html.custom {
+                insert_custom.execute(params![page.url.as_str(), rule, value])?;
             }
             let mut insert_bad = tx.prepare_cached(
                 "INSERT INTO bad_links (page, kind, raw, reason) VALUES (?1, ?2, ?3, ?4)",
@@ -862,7 +984,7 @@ fn xml_locs(xml: &str) -> Vec<String> {
         .collect()
 }
 
-async fn fetch(client: Client, url: Url, depth: Depth) -> Fetched {
+async fn fetch(client: Client, url: Url, depth: Depth, rules: Arc<Vec<CustomRule>>) -> Fetched {
     let mut page = Fetched {
         url,
         depth,
@@ -908,7 +1030,7 @@ async fn fetch(client: Client, url: Url, depth: Depth) -> Fetched {
             Ok(body) => {
                 page.response_ms = elapsed();
                 page.size_bytes = Some(body.len() as i64);
-                page.html = Some(parse_html(&page.url, &body));
+                page.html = Some(parse_html(&page.url, &body, &rules));
             }
             Err(e) => page.error = Some(e.to_string()),
         }
@@ -1113,7 +1235,7 @@ fn structured_data(doc: &Html) -> Vec<Structured> {
 }
 
 // shortcut: ignores <base href>, add it when a site needs it
-fn parse_html(base: &Url, html: &str) -> HtmlData {
+fn parse_html(base: &Url, html: &str, rules: &[CustomRule]) -> HtmlData {
     let doc = Html::parse_document(html);
     let words = content_words(&doc);
     let first_text = |sel: &Selector| doc.select(sel).next().and_then(|e| squash(e.text()));
@@ -1159,6 +1281,7 @@ fn parse_html(base: &Url, html: &str) -> HtmlData {
             .collect(),
         structured: structured_data(&doc),
         bad_links: bad_links(&doc, base),
+        custom: apply_rules(&doc, html, rules),
         // shortcut: <head> annotations only, not the HTTP Link header or sitemap xhtml:link variants
         hreflang: doc
             .select(&LINK_REL)
@@ -1523,7 +1646,7 @@ mod tests {
             <a href="/other#frag">x</a>
           </body></html>"#;
 
-        let data = parse_html(&base, html);
+        let data = parse_html(&base, html, &[]);
 
         assert_eq!(data.title.as_deref(), Some("My Post"));
         assert_eq!(data.meta_description.as_deref(), Some("A short summary"));
@@ -1618,6 +1741,7 @@ mod tests {
                 &format!(
                     "<body><nav>{nav}</nav><main>{body}</main><footer>{nav} footer</footer></body>"
                 ),
+                &[],
             )
         };
         let a = page(&article, "Home Servizi Contatti");
@@ -1693,11 +1817,52 @@ mod tests {
     }
 
     #[test]
+    fn custom_rules_extract_values_and_count_matches() {
+        let html = r#"<html><head><meta property="article:author" content=" Daniele Zecca ">
+            <script async src="https://www.googletagmanager.com/gtag/js?id=G-ABC123"></script></head>
+            <body><span class="price">€ 49</span><span class="price">€ 99</span><span class="price"> </span></body></html>"#;
+        let rules = [
+            CustomRule::new("Prezzo", "css", ".price", None).unwrap(),
+            CustomRule::new(
+                "Autore",
+                "css",
+                r#"meta[property="article:author"]"#,
+                Some("content"),
+            )
+            .unwrap(),
+            CustomRule::new("GA4 ID", "regex", r"id=(G-[A-Z0-9]+)", None).unwrap(),
+            CustomRule::new("GTM", "search", "googletagmanager.com", None).unwrap(),
+            CustomRule::new("Hotjar", "search", "hotjar.com", None).unwrap(),
+            CustomRule::new("Assente", "css", ".missing", None).unwrap(),
+        ];
+        let base = Url::parse("https://s.it/").unwrap();
+        let got = parse_html(&base, html, &rules).custom;
+        let pairs: Vec<(&str, &str)> = got.iter().map(|(r, v)| (r.as_str(), v.as_str())).collect();
+        assert_eq!(
+            pairs,
+            [
+                ("Prezzo", "€ 49"),
+                ("Prezzo", "€ 99"), // the empty element yields nothing
+                ("Autore", "Daniele Zecca"),
+                ("GA4 ID", "G-ABC123"),
+                ("GTM", "1"),
+                ("Hotjar", "0"), // searches always report, so "doesn't contain" can be filtered
+            ]
+        );
+        assert!(CustomRule::new("x", "xpath", "//a", None).is_err());
+        assert!(
+            CustomRule::new("x", "search", "a.b(", None).is_ok(),
+            "search text is literal, not a regex"
+        );
+    }
+
+    #[test]
     fn empty_or_absent_metadata_is_missing() {
         let base = Url::parse("https://site.test/").unwrap();
         let data = parse_html(
             &base,
             "<title>  </title><meta name=description content=''><p>hi</p>",
+            &[],
         );
         assert_eq!(
             data,

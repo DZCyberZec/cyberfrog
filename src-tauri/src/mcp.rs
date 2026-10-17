@@ -78,7 +78,8 @@ const SCHEMA_HELP: &str = "Tables: pages(url, depth, status, content_type, redir
 meta_description, h1, canonical, meta_robots, word_count, x_robots_tag, response_ms, size_bytes, content_hash, simhash); \
 links(source, target, anchor, external); external(url, status, content_type, error); images(page, src, alt, has_size); \
 image_info(src, status, bytes, content_type, error); sitemap(url, file); hreflang(page, lang, href); \
-structured(page, format, kind, issue); bad_links(page, kind, raw, reason). Crawls before v0.2 may lack some tables.";
+structured(page, format, kind, issue); bad_links(page, kind, raw, reason); custom_rules(name, kind, expr, attr); \
+custom(page, rule, value) — a search rule stores its match count as value. Older crawls may lack some tables.";
 
 fn tools() -> Value {
     let crawl_arg = json!({"type": "string", "description": "Path of a crawl file from list_crawls. Defaults to the most recent crawl."});

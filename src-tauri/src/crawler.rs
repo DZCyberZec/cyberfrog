@@ -329,6 +329,8 @@ struct HtmlData {
     bad_links: Vec<BadLink>,
     /// What AI answer engines need to quote the page.
     geo: crate::geo::signals::Signals,
+    /// Most frequent topic words of the main content, for topic clusters.
+    keywords: Vec<(String, u32)>,
 }
 
 /// A link a crawler can't follow: JavaScript navigation, href outside `<a>`, or an invalid URL.
@@ -369,7 +371,7 @@ struct Link {
     anchor: Option<String>,
 }
 
-#[derive(Debug, PartialEq, serde::Serialize)]
+#[derive(Debug, Default, PartialEq, serde::Serialize)]
 pub struct Page {
     pub url: String,
     pub depth: Depth,
@@ -631,6 +633,12 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              status INTEGER,
              body   TEXT
          );
+         CREATE TABLE IF NOT EXISTS keywords (
+             page  TEXT NOT NULL,
+             term  TEXT NOT NULL,
+             count INTEGER NOT NULL,
+             PRIMARY KEY (page, term)
+         ) WITHOUT ROWID;
          CREATE TABLE IF NOT EXISTS geo (
              page              TEXT PRIMARY KEY,
              first_para_words  INTEGER NOT NULL,
@@ -885,6 +893,12 @@ pub async fn crawl(
             for (lang, href) in &html.hreflang {
                 insert_hreflang.execute(params![page.url.as_str(), lang, href.as_str()])?;
             }
+            let mut insert_kw = tx.prepare_cached(
+                "INSERT OR REPLACE INTO keywords (page, term, count) VALUES (?1, ?2, ?3)",
+            )?;
+            for (term, count) in &html.keywords {
+                insert_kw.execute(params![page.url.as_str(), term, count])?;
+            }
             if is_html {
                 let g = &html.geo;
                 tx.execute(
@@ -1135,6 +1149,9 @@ fn same_site(url: &Url, start: &Url) -> bool {
     matches!(url.scheme(), "http" | "https")
         && (url.host_str(), url.port()) == (start.host_str(), start.port())
 }
+
+/// Topic words kept per page: enough to tell subjects apart, small enough for big crawls.
+const KEYWORDS_PER_PAGE: usize = 30;
 
 /// Size cap for robots.txt and llms.txt; Google also reads only the first 500 KiB of robots.txt.
 const MAX_SITE_FILE: usize = 512 * 1024;
@@ -1584,6 +1601,7 @@ fn parse_html(base: &Url, html: &str, rules: &[CustomRule]) -> HtmlData {
         structured: structured_data(&doc),
         bad_links: bad_links(&doc, base),
         geo: crate::geo::signals::signals(&doc, &words),
+        keywords: crate::topics::terms::top_terms(&words, KEYWORDS_PER_PAGE),
         custom: apply_rules(&doc, html, rules),
         // shortcut: <head> annotations only, not the HTTP Link header or sitemap xhtml:link variants
         hreflang: doc

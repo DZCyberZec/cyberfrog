@@ -4,6 +4,7 @@ pub mod geo;
 pub mod mcp;
 pub mod report;
 pub mod schedule;
+pub mod topics;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -134,6 +135,7 @@ struct CrawlData {
     bad_links: Vec<BadLinkRow>,
     custom: CustomData,
     geo: geo::GeoData,
+    topics: topics::TopicsData,
 }
 
 #[derive(serde::Serialize)]
@@ -168,6 +170,7 @@ fn load(path: &Path) -> Result<CrawlData, String> {
         bad_links: report::read_bad_links(path).map_err(unreadable)?,
         custom: report::read_custom(path).map_err(unreadable)?,
         geo: geo::read(path).map_err(unreadable)?,
+        topics: topics::analyze(path).map_err(unreadable)?,
     })
 }
 

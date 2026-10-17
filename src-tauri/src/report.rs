@@ -351,3 +351,80 @@ pub fn read_custom(path: &Path) -> rusqlite::Result<CustomData> {
         .collect::<rusqlite::Result<_>>()?;
     Ok(CustomData { rules, values })
 }
+
+/// Link Score per page, aligned with `urls`: internal PageRank (damping 0.85) over `<a>` links and
+/// redirects between crawled URLs, scaled logarithmically to 0–100 so the strongest page scores 100.
+pub(crate) fn link_scores(db: &Connection, urls: &[String]) -> rusqlite::Result<Vec<u8>> {
+    use std::collections::HashMap;
+    let n = urls.len();
+    if n == 0 {
+        return Ok(Vec::new());
+    }
+    let index: HashMap<&str, usize> = urls
+        .iter()
+        .enumerate()
+        .map(|(i, u)| (u.as_str(), i))
+        .collect();
+    let internal = if compiles(db, "SELECT external FROM links LIMIT 0") {
+        "WHERE external = 0"
+    } else {
+        ""
+    };
+    let mut edges: Vec<(usize, usize)> = Vec::new();
+    let mut add = |source: &str, target: &str| {
+        if let (Some(&s), Some(&t)) = (index.get(source), index.get(target))
+            && s != t
+        {
+            edges.push((s, t));
+        }
+    };
+    let mut stmt = db.prepare(&format!("SELECT source, target FROM links {internal}"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(r) = rows.next()? {
+        add(&r.get::<_, String>(0)?, &r.get::<_, String>(1)?);
+    }
+    let mut stmt =
+        db.prepare("SELECT url, redirect_to FROM pages WHERE redirect_to IS NOT NULL")?;
+    let mut rows = stmt.query([])?;
+    while let Some(r) = rows.next()? {
+        let target: String = r.get(1)?;
+        add(
+            &r.get::<_, String>(0)?,
+            target.split('#').next().unwrap_or_default(),
+        );
+    }
+
+    let mut out_degree = vec![0usize; n];
+    for &(s, _) in &edges {
+        out_degree[s] += 1;
+    }
+    const DAMPING: f64 = 0.85;
+    let mut rank = vec![1.0 / n as f64; n];
+    for _ in 0..40 {
+        // pages without outlinks spread their rank evenly, as in the classic formulation
+        let dangling: f64 = (0..n)
+            .filter(|&i| out_degree[i] == 0)
+            .map(|i| rank[i])
+            .sum();
+        let base = (1.0 - DAMPING) / n as f64 + DAMPING * dangling / n as f64;
+        let mut next = vec![base; n];
+        for &(s, t) in &edges {
+            next[t] += DAMPING * rank[s] / out_degree[s] as f64;
+        }
+        rank = next;
+    }
+    let (lo, hi) = rank
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(lo, hi), &r| (lo.min(r), hi.max(r)));
+    let span = (hi / lo).ln();
+    Ok(rank
+        .iter()
+        .map(|&r| {
+            if span <= f64::EPSILON {
+                100
+            } else {
+                (100.0 * (r / lo).ln() / span).round() as u8
+            }
+        })
+        .collect())
+}

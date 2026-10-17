@@ -283,6 +283,8 @@ pub struct Page {
     pub content_hash: Option<String>,
     /// 16 hex digits of SimHash; few differing bits mean near-duplicate text.
     pub simhash: Option<String>,
+    /// Internal PageRank scaled to 0–100 (see `report::link_scores`).
+    pub link_score: u8,
 }
 
 /// Crawl progress within a stage: items finished, and items waiting or in flight.
@@ -353,33 +355,43 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
                 {response_ms}, {size_bytes}, {content_hash}, {simhash}
          FROM pages ORDER BY rowid"
     ))?;
-    stmt.query_map([], |r| {
-        Ok(Page {
-            url: r.get(0)?,
-            depth: r.get(1)?,
-            status: r.get(2)?,
-            content_type: r.get(3)?,
-            redirect_to: r.get(4)?,
-            blocked_by_robots: r.get(5)?,
-            error: r.get(6)?,
-            title: r.get(7)?,
-            meta_description: r.get(8)?,
-            h1: r.get(9)?,
-            canonical: r.get(10)?,
-            meta_robots: r.get(11)?,
-            word_count: r.get(12)?,
-            inlinks: r.get(13)?,
-            x_robots_tag: r.get(14)?,
-            outlinks: r.get(15)?,
-            external_outlinks: r.get(16)?,
-            in_sitemap: r.get(17)?,
-            response_ms: r.get(18)?,
-            size_bytes: r.get(19)?,
-            content_hash: r.get(20)?,
-            simhash: r.get(21)?,
-        })
-    })?
-    .collect()
+    let mut pages = stmt
+        .query_map([], |r| {
+            Ok(Page {
+                url: r.get(0)?,
+                depth: r.get(1)?,
+                status: r.get(2)?,
+                content_type: r.get(3)?,
+                redirect_to: r.get(4)?,
+                blocked_by_robots: r.get(5)?,
+                error: r.get(6)?,
+                title: r.get(7)?,
+                meta_description: r.get(8)?,
+                h1: r.get(9)?,
+                canonical: r.get(10)?,
+                meta_robots: r.get(11)?,
+                word_count: r.get(12)?,
+                inlinks: r.get(13)?,
+                x_robots_tag: r.get(14)?,
+                outlinks: r.get(15)?,
+                external_outlinks: r.get(16)?,
+                in_sitemap: r.get(17)?,
+                response_ms: r.get(18)?,
+                size_bytes: r.get(19)?,
+                content_hash: r.get(20)?,
+                simhash: r.get(21)?,
+                link_score: 0,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<Page>>>()?;
+    let urls: Vec<String> = pages.iter().map(|p| p.url.clone()).collect();
+    for (page, score) in pages
+        .iter_mut()
+        .zip(crate::report::link_scores(&db, &urls)?)
+    {
+        page.link_score = score;
+    }
+    Ok(pages)
 }
 
 pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
@@ -1861,6 +1873,33 @@ mod tests {
         assert!(
             CustomRule::new("x", "search", "a.b(", None).is_ok(),
             "search text is literal, not a regex"
+        );
+    }
+
+    #[test]
+    fn link_score_ranks_pages_by_internal_links() {
+        let path = db_path("linkscore");
+        let db = open_db(&path).unwrap();
+        db.execute_batch(
+            "INSERT INTO pages (url, depth, status) VALUES ('/', 0, 200), ('/a', 1, 200), ('/b', 1, 200), ('/c', 1, 200),
+                 ('/old', 1, 301), ('/new', 2, 200);
+             UPDATE pages SET redirect_to = '/new#x' WHERE url = '/old';
+             INSERT INTO links (source, target, external) VALUES
+                 ('/', '/a', 0), ('/', '/b', 0), ('/a', '/b', 0), ('/b', '/', 0), ('/c', '/', 0), ('/', '/old', 0),
+                 ('/a', 'https://other.it/', 1), ('/a', '/a', 0);",
+        )
+        .unwrap();
+        let score: std::collections::HashMap<String, u8> = read_pages(&path)
+            .unwrap()
+            .into_iter()
+            .map(|p| (p.url, p.link_score))
+            .collect();
+        assert_eq!(score["/c"], 0, "no inlinks: weakest page");
+        assert_eq!(*score.values().max().unwrap(), 100);
+        assert!(score["/b"] > score["/a"], "two inlinks beat one: {score:?}");
+        assert!(
+            score["/new"] > score["/c"],
+            "redirects pass rank to their target: {score:?}"
         );
     }
 

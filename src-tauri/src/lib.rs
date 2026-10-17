@@ -12,7 +12,7 @@ use tauri::Manager;
 use tauri::ipc::Channel;
 use url::Url;
 
-use crawler::{Config, CustomRule, Page, Progress};
+use crawler::{Config, CustomRule, Page, Progress, Renderer};
 use report::{
     BadLinkRow, BrokenLink, CustomData, ExternalLink, HreflangRow, ImageRow, ImageUse, PageLinks,
     StructuredRow,
@@ -37,6 +37,9 @@ struct Settings {
     /// Custom extraction and search rules; rows without a name or expression are ignored.
     #[serde(default)]
     rules: Vec<RuleSpec>,
+    /// Analyse pages after JavaScript rendering in a local headless browser.
+    #[serde(default)]
+    render_js: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -72,8 +75,17 @@ fn config(start: Url, s: Settings) -> Result<Config, String> {
             CustomRule::new(name, &r.kind, r.expr.trim(), r.attr.as_deref())
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let renderer = if s.render_js {
+        let browser = Renderer::find_browser().ok_or(
+            "Rendering JavaScript: nessun browser trovato. Installa Google Chrome, Chromium, Brave o Edge.",
+        )?;
+        Some(Arc::new(Renderer::new(browser, s.concurrency)))
+    } else {
+        None
+    };
     let user_agent = s.user_agent.trim();
     Ok(Config {
+        renderer,
         rules: Arc::new(rules),
         max_urls: s.max_urls.clamp(1, MAX_URLS_LIMIT),
         concurrency: s.concurrency.clamp(1, MAX_CONCURRENCY),
@@ -203,6 +215,12 @@ fn save_crawl_as(from: String, to: String) -> Result<(), String> {
 }
 
 /// Most recent crawls in the app data dir, newest first; unreadable files are skipped.
+/// The browser JavaScript rendering would use, for the settings dialog.
+#[tauri::command]
+fn find_browser() -> Option<String> {
+    Renderer::find_browser().map(|p| p.display().to_string())
+}
+
 #[tauri::command]
 fn list_crawls(app: tauri::AppHandle) -> Result<Vec<CrawlSummary>, String> {
     let mut out: Vec<CrawlSummary> = std::fs::read_dir(crawls_dir(&app)?)
@@ -253,6 +271,7 @@ pub fn run() {
             image_pages,
             save_crawl_as,
             list_crawls,
+            find_browser,
             write_text_file
         ])
         .run(tauri::generate_context!())
@@ -274,6 +293,7 @@ mod tests {
             use_sitemaps: false,
             exclude: exclude.iter().map(|s| s.to_string()).collect(),
             rules: Vec::new(),
+            render_js: false,
         }
     }
 

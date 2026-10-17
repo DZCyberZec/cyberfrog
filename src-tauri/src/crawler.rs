@@ -2,7 +2,7 @@
 
 use std::collections::{HashSet, VecDeque};
 use std::error::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
@@ -52,6 +52,105 @@ pub struct Config {
     pub stop: Arc<AtomicBool>,
     /// Custom extraction and search rules applied to every HTML page.
     pub rules: Arc<Vec<CustomRule>>,
+    /// Render HTML pages in a headless browser and analyse the rendered DOM.
+    pub renderer: Option<Arc<Renderer>>,
+}
+
+/// Renders pages with a locally installed Chromium-based browser in headless mode.
+pub struct Renderer {
+    pub browser: PathBuf,
+    /// Caps simultaneous browser processes, which are far heavier than HTTP requests.
+    slots: tokio::sync::Semaphore,
+}
+
+const MAX_RENDERS: usize = 4;
+const RENDER_TIMEOUT: Duration = Duration::from_secs(30);
+
+impl Renderer {
+    pub fn new(browser: PathBuf, concurrency: usize) -> Self {
+        Renderer {
+            browser,
+            slots: tokio::sync::Semaphore::new(concurrency.clamp(1, MAX_RENDERS)),
+        }
+    }
+
+    /// First Chromium-based browser found: Chrome, Chromium, Brave, Edge (macOS paths, then PATH).
+    pub fn find_browser() -> Option<PathBuf> {
+        const APPS: &[&str] = &[
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        ];
+        const COMMANDS: &[&str] = &[
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+            "microsoft-edge",
+        ];
+        APPS.iter()
+            .map(PathBuf::from)
+            .find(|p| p.exists())
+            .or_else(|| {
+                let path = std::env::var_os("PATH")?;
+                std::env::split_paths(&path)
+                    .flat_map(|dir| COMMANDS.iter().map(move |c| dir.join(c)))
+                    .find(|p| p.exists())
+            })
+    }
+
+    /// The DOM after scripts ran, serialised as HTML. Each run gets a throwaway profile so it never
+    /// touches the user's browser data or collides with a browser already open.
+    async fn render(&self, url: &Url, user_agent: &str) -> Result<String, String> {
+        let _slot = self.slots.acquire().await.map_err(|e| e.to_string())?;
+        static RUN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let profile = std::env::temp_dir().join(format!(
+            "cyberfrog-render-{}-{}",
+            std::process::id(),
+            RUN.fetch_add(1, Ordering::Relaxed)
+        ));
+        let output = tokio::time::timeout(
+            RENDER_TIMEOUT,
+            tokio::process::Command::new(&self.browser)
+                .args([
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--mute-audio",
+                ])
+                .arg(format!("--user-data-dir={}", profile.display()))
+                .arg(format!("--user-agent={user_agent}"))
+                .arg("--virtual-time-budget=5000")
+                .arg("--dump-dom")
+                .arg(url.as_str())
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await;
+        let _ = std::fs::remove_dir_all(&profile);
+        match output {
+            Err(_) => Err(format!(
+                "rendering took over {} s",
+                RENDER_TIMEOUT.as_secs()
+            )),
+            Ok(Err(e)) => Err(e.to_string()),
+            Ok(Ok(out)) if out.stdout.is_empty() => {
+                Err(format!("the browser returned no DOM ({})", out.status))
+            }
+            Ok(Ok(out)) => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
+        }
+    }
+}
+
+/// What every fetch task needs; cheap to clone.
+#[derive(Clone)]
+struct FetchCtx {
+    client: Client,
+    rules: Arc<Vec<CustomRule>>,
+    renderer: Option<Arc<Renderer>>,
+    user_agent: Arc<str>,
 }
 
 /// A user rule applied to every HTML page: pull values out (CSS, regex) or count matches (search).
@@ -166,6 +265,7 @@ impl Config {
             exclude: Vec::new(),
             stop: Arc::default(),
             rules: Arc::default(),
+            renderer: None,
         }
     }
 }
@@ -183,9 +283,21 @@ struct Fetched {
     x_robots_tag: Option<String>,
     response_ms: Option<u32>,
     size_bytes: Option<i64>,
+    /// Set when the page was analysed after JavaScript rendering.
+    render: Option<RenderInfo>,
     redirect_to: Option<Url>,
     /// `None` unless the response was HTML and its body was read.
     html: Option<HtmlData>,
+    error: Option<String>,
+}
+
+/// How the raw HTML compared with the rendered DOM.
+#[derive(Debug, Default)]
+struct RenderInfo {
+    raw_word_count: u32,
+    /// Distinct http(s) link targets in the raw HTML.
+    raw_links: u32,
+    /// Why rendering failed; the raw HTML was analysed instead.
     error: Option<String>,
 }
 
@@ -285,6 +397,12 @@ pub struct Page {
     pub simhash: Option<String>,
     /// Internal PageRank scaled to 0–100 (see `report::link_scores`).
     pub link_score: u8,
+    /// Analysed after JavaScript rendering.
+    pub rendered: bool,
+    /// Words and distinct link targets in the HTML before rendering, when rendering was on.
+    pub raw_word_count: Option<u32>,
+    pub raw_links: Option<u32>,
+    pub render_error: Option<String>,
 }
 
 /// Crawl progress within a stage: items finished, and items waiting or in flight.
@@ -334,6 +452,12 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
         newer("size_bytes"),
     );
     let (content_hash, simhash) = (newer("content_hash"), newer("simhash"));
+    let (rendered, raw_word_count, raw_links, render_error) = (
+        newer("rendered"),
+        newer("raw_word_count"),
+        newer("raw_links"),
+        newer("render_error"),
+    );
     // crawls saved before external links were stored count every link as same-site
     let (outlinks, external) = if db.prepare("SELECT external FROM links LIMIT 0").is_ok() {
         (
@@ -352,7 +476,8 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
         "SELECT url, depth, status, content_type, redirect_to, blocked_by_robots, error,
                 title, meta_description, h1, canonical, meta_robots, word_count,
                 (SELECT count(*) FROM links WHERE target = pages.url), {x_robots}, {outlinks}, {external}, {in_sitemap},
-                {response_ms}, {size_bytes}, {content_hash}, {simhash}
+                {response_ms}, {size_bytes}, {content_hash}, {simhash},
+                {rendered}, {raw_word_count}, {raw_links}, {render_error}
          FROM pages ORDER BY rowid"
     ))?;
     let mut pages = stmt
@@ -381,6 +506,10 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
                 content_hash: r.get(20)?,
                 simhash: r.get(21)?,
                 link_score: 0,
+                rendered: r.get::<_, Option<bool>>(22)?.unwrap_or(false),
+                raw_word_count: r.get(23)?,
+                raw_links: r.get(24)?,
+                render_error: r.get(25)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<Page>>>()?;
@@ -416,7 +545,11 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              response_ms       INTEGER,
              size_bytes        INTEGER,
              content_hash      TEXT,
-             simhash           TEXT
+             simhash           TEXT,
+             rendered          INTEGER,
+             raw_word_count    INTEGER,
+             raw_links         INTEGER,
+             render_error      TEXT
          );
          CREATE TABLE IF NOT EXISTS links (
              source   TEXT NOT NULL,
@@ -555,6 +688,12 @@ pub async fn crawl(
         sitemap_seed = Some(listed.into_iter().map(|(url, _)| url));
     }
 
+    let ctx = FetchCtx {
+        client: client.clone(),
+        rules: cfg.rules.clone(),
+        renderer: cfg.renderer.clone(),
+        user_agent: cfg.user_agent.as_str().into(),
+    };
     let mut start = cfg.start.clone();
     start.set_fragment(None);
     let mut seen = HashSet::from([start.to_string()]);
@@ -582,7 +721,7 @@ pub async fn crawl(
                 });
                 continue;
             }
-            tasks.spawn(fetch(client.clone(), url, depth, cfg.rules.clone()));
+            tasks.spawn(fetch(ctx.clone(), url, depth));
         }
 
         let Some(joined) = tasks.join_next().await else {
@@ -618,8 +757,8 @@ pub async fn crawl(
         tx.execute(
             "INSERT OR IGNORE INTO pages (url, depth, status, content_type, redirect_to, error,
                  title, meta_description, h1, canonical, meta_robots, word_count, x_robots_tag,
-                 response_ms, size_bytes, content_hash, simhash)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                 response_ms, size_bytes, content_hash, simhash, rendered, raw_word_count, raw_links, render_error)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
             params![
                 page.url.as_str(),
                 page.depth,
@@ -638,6 +777,10 @@ pub async fn crawl(
                 page.size_bytes,
                 html.content_hash,
                 html.simhash,
+                page.render.as_ref().map(|r| r.error.is_none()),
+                page.render.as_ref().map(|r| r.raw_word_count),
+                page.render.as_ref().map(|r| r.raw_links),
+                page.render.as_ref().and_then(|r| r.error.clone()),
             ],
         )?;
         {
@@ -1003,7 +1146,7 @@ fn xml_locs(xml: &str) -> Vec<String> {
         .collect()
 }
 
-async fn fetch(client: Client, url: Url, depth: Depth, rules: Arc<Vec<CustomRule>>) -> Fetched {
+async fn fetch(ctx: FetchCtx, url: Url, depth: Depth) -> Fetched {
     let mut page = Fetched {
         url,
         depth,
@@ -1012,13 +1155,14 @@ async fn fetch(client: Client, url: Url, depth: Depth, rules: Arc<Vec<CustomRule
         x_robots_tag: None,
         response_ms: None,
         size_bytes: None,
+        render: None,
         redirect_to: None,
         html: None,
         error: None,
     };
     let t0 = Instant::now();
     let elapsed = || Some(t0.elapsed().as_millis().min(u32::MAX as u128) as u32);
-    let resp = match client.get(page.url.clone()).send().await {
+    let resp = match ctx.client.get(page.url.clone()).send().await {
         Ok(resp) => resp,
         Err(e) => {
             page.error = Some(e.to_string());
@@ -1049,7 +1193,33 @@ async fn fetch(client: Client, url: Url, depth: Depth, rules: Arc<Vec<CustomRule
             Ok(body) => {
                 page.response_ms = elapsed();
                 page.size_bytes = Some(body.len() as i64);
-                page.html = Some(parse_html(&page.url, &body, &rules));
+                page.html = Some(match &ctx.renderer {
+                    None => parse_html(&page.url, &body, &ctx.rules),
+                    Some(r) => {
+                        let raw = parse_html(&page.url, &body, &[]);
+                        // counted like stored outlinks: distinct http(s) targets without fragment, no self-links
+                        let distinct: HashSet<Url> = raw
+                            .links
+                            .into_iter()
+                            .map(|l| normalize(l.url))
+                            .filter(|u| matches!(u.scheme(), "http" | "https") && *u != page.url)
+                            .collect();
+                        let mut info = RenderInfo {
+                            raw_word_count: raw.word_count,
+                            raw_links: distinct.len() as u32,
+                            error: None,
+                        };
+                        let html = match r.render(&page.url, &ctx.user_agent).await {
+                            Ok(dom) => parse_html(&page.url, &dom, &ctx.rules),
+                            Err(e) => {
+                                info.error = Some(e);
+                                parse_html(&page.url, &body, &ctx.rules)
+                            }
+                        };
+                        page.render = Some(info);
+                        html
+                    }
+                });
             }
             Err(e) => page.error = Some(e.to_string()),
         }
@@ -2336,5 +2506,54 @@ mod tests {
 
         assert_eq!(crawl(cfg, &path, |_| {}).await.unwrap(), 2);
         assert_eq!(rows(&path).len(), 2);
+    }
+
+    #[tokio::test]
+    async fn rendering_finds_links_and_text_added_by_javascript() {
+        let Some(browser) = Renderer::find_browser() else {
+            eprintln!("skipped: no Chromium-based browser installed");
+            return;
+        };
+        let base = serve_with(|_, path| match path {
+            "/" => http(
+                "200 OK",
+                "Content-Type: text/html\r\n",
+                r#"<html><head><title>JS</title></head><body><p>raw</p><script>
+                   const a = document.createElement('a'); a.href = '/js-only'; a.textContent = 'JS link';
+                   document.body.appendChild(a);
+                   const p = document.createElement('p'); p.textContent = 'one two three four five';
+                   document.body.appendChild(p);
+                   </script></body></html>"#,
+            ),
+            "/js-only" => http("200 OK", "Content-Type: text/html\r\n", "<html><body>ok</body></html>"),
+            _ => http("404 Not Found", "", ""),
+        })
+        .await;
+        let path = db_path("render");
+        let cfg = Config {
+            check_external: false,
+            check_images: false,
+            use_sitemaps: false,
+            respect_robots: false,
+            renderer: Some(Arc::new(Renderer::new(browser, 2))),
+            ..Config::new(base.clone())
+        };
+        crawl(cfg, &path, |_| {}).await.unwrap();
+        let pages = read_pages(&path).unwrap();
+        let home = pages.iter().find(|p| p.url == base.as_str()).unwrap();
+        assert!(home.rendered, "{:?}", home.render_error);
+        assert_eq!(home.raw_links, Some(0));
+        assert_eq!(home.raw_word_count, Some(1));
+        assert!(
+            home.word_count > Some(5),
+            "rendered text counted: {:?}",
+            home.word_count
+        );
+        assert!(
+            pages
+                .iter()
+                .any(|p| p.url == base.join("/js-only").unwrap().as_str()),
+            "link that exists only after rendering is crawled"
+        );
     }
 }

@@ -6,14 +6,14 @@ import type { Page } from "../src/pages.ts";
 Object.defineProperty(globalThis, "navigator", { value: { language: "it-IT" }, configurable: true });
 const {
   BROKEN_FILTERS, customRows, customFilters, CHANGE_FILTERS, compareCrawls, allIssues, BAD_LINK_FILTERS, badLinkReason, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
-  REDIRECT_FILTERS, redirectChains, siteTree, depthCounts,
+  REDIRECT_FILTERS, redirectChains, siteTree, depthCounts, JS_FILTERS,
 } = await import("../src/pages.ts");
 const { hasTranslation } = await import("../src/i18n.ts");
 
 const base: Page = {
   url: "", depth: 0, status: 200, content_type: "text/html", redirect_to: null, blocked_by_robots: false,
   error: null, title: null, meta_description: null, h1: null, canonical: null, meta_robots: null,
-  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0, in_sitemap: false, response_ms: null, size_bytes: null, content_hash: null, simhash: null, link_score: 0,
+  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0, in_sitemap: false, response_ms: null, size_bytes: null, content_hash: null, simhash: null, link_score: 0, rendered: false, raw_word_count: null, raw_links: null, render_error: null,
 };
 const pages: Page[] = [
   { ...base, url: "/a", title: "Same title for both pages here!" },
@@ -215,12 +215,12 @@ const tabsWithFilters: Record<string, string[]> = {
   h1: metaFilters(CHECKS[2]).map((f) => f.id), images: IMAGE_FILTERS.map((f) => f.id), perf: PERF_FILTERS.map((f) => f.id),
   sitemap: SITEMAP_FILTERS.map((f) => f.id), schema: schemaFilters([]).map((f) => f.id), hreflang: HREFLANG_FILTERS.map((f) => f.id),
   duplicates: DUP_FILTERS.map((f) => f.id), badlinks: BAD_LINK_FILTERS.map((f) => f.id),
-  redirects: REDIRECT_FILTERS.map((f) => f.id),
+  redirects: REDIRECT_FILTERS.map((f) => f.id), js: JS_FILTERS.map((f) => f.id),
 };
 for (const d of ISSUES) assert.ok(tabsWithFilters[d.tab]?.includes(d.filter), `issue ${d.label} points to a real filter`);
 const labels = [
   ...ISSUES.flatMap((d) => [d.label, d.fix, d.priority]),
-  ...[CODE_FILTERS, BROKEN_FILTERS, CHANGE_FILTERS, REDIRECT_FILTERS, BAD_LINK_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
+  ...[CODE_FILTERS, BROKEN_FILTERS, CHANGE_FILTERS, REDIRECT_FILTERS, BAD_LINK_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, JS_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
       indexFilters([]), schemaFilters([]), ...CHECKS.map(metaFilters)].flat().map((f) => f.label),
 ];
 const untranslated = [...new Set(labels)].filter((l) => !hasTranslation(l) && !/^(\d|Tutt|Oltre|Sotto|Contenuto scarso \()/.test(l));
@@ -311,4 +311,14 @@ assert.equal(tree.urls, 7);
 assert.deepEqual(tree.children.map((c) => [c.name, c.urls, c.indexable, c.maxScore]), [["blog", 4, 3, 60], ["chi-sono", 1, 1, 40], ["solo-sitemap", 1, 1, 0]]);
 assert.equal(tree.children[0].page?.url, "https://s.it/blog/", "the ?page=2 variant doesn't replace the folder's own page");
 assert.deepEqual(depthCounts(tp), [{ depth: 0, count: 1 }, { depth: 1, count: 2 }, { depth: 2, count: 3 }, { depth: null, count: 1 }]);
+const jp: Page[] = [
+  { ...base, url: "/spa", rendered: true, word_count: 400, raw_word_count: 10, outlinks: 5, raw_links: 2 },
+  { ...base, url: "/widget", rendered: true, word_count: 1000, raw_word_count: 940, outlinks: 3, raw_links: 3 },
+  { ...base, url: "/fail", render_error: "timeout", word_count: 100, raw_word_count: 100, raw_links: 0 },
+  { ...base, url: "/off", word_count: 500 },
+];
+assert.deepEqual(pick(jp, JS_FILTERS, "all"), ["/spa", "/widget", "/fail"], "pages crawled without rendering are left out");
+assert.deepEqual(pick(jp, JS_FILTERS, "js-content"), ["/spa"], "60 extra words in 1000 is a widget, not content");
+assert.deepEqual(pick(jp, JS_FILTERS, "js-links"), ["/spa"]);
+assert.deepEqual(pick(jp, JS_FILTERS, "errors"), ["/fail"]);
 console.log("pages.check: ok");

@@ -18,6 +18,9 @@ import {
   LARGE_IMAGE_BYTES,
   SITEMAP_FILTERS,
   PERF_FILTERS,
+  JS_FILTERS,
+  jsLinks,
+  jsWords,
   SLOW_MS,
   HREFLANG_FILTERS,
   hreflangIssues,
@@ -120,6 +123,17 @@ const perfColumns = page.columns([
   page.accessor("size_bytes", { header: tr("Peso"), size: 100, cell: (c) => <span className="num">{formatBytes(c.getValue())}</span> }),
   page.accessor("content_type", { header: "Content type", size: 200 }),
   page.accessor("word_count", { header: tr("Parole"), size: 80, cell: (c) => num(c.getValue()) }),
+]);
+const jsColumns = page.columns([
+  page.accessor("url", { header: "URL", size: 420 }),
+  statusColumn,
+  page.accessor("raw_word_count", { header: tr("Parole HTML"), size: 105, cell: (c) => num(c.getValue()) }),
+  page.accessor("word_count", { header: tr("Parole renderizzate"), size: 150, cell: (c) => num(c.getValue()) }),
+  page.accessor(jsWords, { id: "js_words", header: tr("Parole da JS"), size: 110, cell: (c) => num(c.getValue()) }),
+  page.accessor("raw_links", { header: tr("Link HTML"), size: 95, cell: (c) => num(c.getValue()) }),
+  page.accessor((p) => p.outlinks + p.external_outlinks, { id: "rendered_links", header: tr("Link renderizzati"), size: 135, cell: (c) => num(c.getValue()) }),
+  page.accessor(jsLinks, { id: "js_links", header: tr("Link da JS"), size: 95, cell: (c) => num(c.getValue()) }),
+  page.accessor("render_error", { header: tr("Errore di rendering"), size: 260 }),
 ]);
 const codeColumns = page.columns([
   page.accessor("url", { header: "URL", size: 460 }),
@@ -342,6 +356,7 @@ type Tab =
   | "images"
   | "sitemap"
   | "perf"
+  | "js"
   | "hreflang"
   | "schema"
   | "duplicates"
@@ -364,6 +379,7 @@ const GROUPS: { label: string; items: { id: Tab; label: string }[] }[] = [
       { id: "redirects", label: tr("Redirect") },
       { id: "index", label: tr("Indicizzabilità") },
       { id: "perf", label: tr("Prestazioni") },
+      { id: "js", label: "JavaScript" },
       { id: "duplicates", label: tr("Duplicati") },
     ],
   },
@@ -1015,6 +1031,22 @@ export default function App() {
                   columns={perfColumns}
                   filters={PERF_FILTERS}
                   exportName={`${host}-prestazioni`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "js" && (
+                <DataTable
+                  key={`js-${jump.seq}`}
+                  initialFilter={jump.tab === "js" ? jump.filter ?? undefined : undefined}
+                  data={pages}
+                  columns={jsColumns}
+                  filters={JS_FILTERS}
+                  emptyText={
+                    pages.some((p) => p.rendered || p.render_error !== null)
+                      ? undefined
+                      : tr("Attiva Rendering JavaScript nelle Impostazioni e avvia un nuovo crawl.")
+                  }
+                  exportName={`${host}-javascript`}
                   {...selectByUrl}
                 />
               )}

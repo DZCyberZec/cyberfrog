@@ -75,7 +75,7 @@ pub async fn handle(msg: &Value, dir: &Path) -> Option<Value> {
 }
 
 const SCHEMA_HELP: &str = "Tables: pages(url, depth, status, content_type, redirect_to, blocked_by_robots, error, title, \
-meta_description, h1, canonical, meta_robots, word_count, x_robots_tag, response_ms, size_bytes, content_hash, simhash); \
+meta_description, h1, canonical, meta_robots, word_count, x_robots_tag, response_ms, size_bytes, content_hash, simhash, rendered, raw_word_count, raw_links, render_error); \
 links(source, target, anchor, external); external(url, status, content_type, error); images(page, src, alt, has_size); \
 image_info(src, status, bytes, content_type, error); sitemap(url, file); hreflang(page, lang, href); \
 structured(page, format, kind, issue); bad_links(page, kind, raw, reason); custom_rules(name, kind, expr, attr); \
@@ -94,6 +94,7 @@ fn tools() -> Value {
                 "max_urls": {"type": "integer", "description": "URL limit, default 500, max 10000"},
                 "check_external": {"type": "boolean", "description": "Also check external links (slower). Default false."},
                 "check_images": {"type": "boolean", "description": "Also check image size and status (slower). Default false."},
+                "render_js": {"type": "boolean", "description": "Analyse pages after JavaScript rendering in a local Chrome/Chromium/Brave/Edge (much slower). Default false."},
                 "rules": {"type": "array", "description": "Custom extraction/search rules; results land in the custom table", "items": {
                     "type": "object",
                     "properties": {
@@ -202,7 +203,15 @@ async fn crawl_site(args: &Value, dir: &Path) -> Result<Value, String> {
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let renderer = if flag("render_js") {
+        let browser = crawler::Renderer::find_browser()
+            .ok_or("render_js: no Chrome, Chromium, Brave or Edge installed")?;
+        Some(std::sync::Arc::new(crawler::Renderer::new(browser, 4)))
+    } else {
+        None
+    };
     let cfg = Config {
+        renderer,
         rules: std::sync::Arc::new(rules),
         max_urls,
         check_external: flag("check_external"),

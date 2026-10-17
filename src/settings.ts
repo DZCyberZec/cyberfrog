@@ -11,6 +11,8 @@ export type Settings = {
   exclude: string[];
   /** Custom extraction and search rules, applied to every HTML page. */
   rules: RuleSpec[];
+  /** Analyse pages after JavaScript rendering in a local headless browser. */
+  render_js: boolean;
 };
 
 /** Mirrors `RuleSpec` in src-tauri/src/lib.rs. */
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   use_sitemaps: true,
   exclude: [],
   rules: [],
+  render_js: false,
 };
 
 const KEY = "cyberfrog.settings";

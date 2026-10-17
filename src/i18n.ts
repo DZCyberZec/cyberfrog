@@ -52,6 +52,10 @@ const ERROR_PREFIXES: [string, string][] = [
   ["Il file non è un crawl CyberFrog leggibile", "Not a readable CyberFrog crawl file"],
   ["Salvataggio non riuscito", "Save failed"],
   ["Pattern di esclusione non valido", "Invalid exclude pattern"],
+  [
+    "Rendering JavaScript: nessun browser trovato. Installa Google Chrome, Chromium, Brave o Edge.",
+    "JavaScript rendering: no browser found. Install Google Chrome, Chromium, Brave or Edge.",
+  ],
 ];
 
 const EN: Record<string, string> = {
@@ -199,6 +203,32 @@ const EN: Record<string, string> = {
   "Risposta oltre 1 s": "Response over 1 s",
   "Risposta oltre 3 s": "Response over 3 s",
   "HTML oltre 512 KB": "HTML over 512 KB",
+  // JavaScript rendering
+  "Pagine renderizzate": "Rendered pages",
+  "Contenuto aggiunto da JavaScript": "Content added by JavaScript",
+  "Link aggiunti da JavaScript": "Links added by JavaScript",
+  "Errori di rendering": "Rendering errors",
+  "Link visibili solo dopo il rendering JavaScript": "Links visible only after JavaScript rendering",
+  "Metti i link importanti nell'HTML del server: Google li trova solo dopo il rendering, più tardi e non sempre.":
+    "Put important links in the server HTML: Google finds them only after rendering, later and not always.",
+  "Contenuto visibile solo dopo il rendering JavaScript": "Content visible only after JavaScript rendering",
+  "Rendi il contenuto principale lato server (SSR o pre-rendering) perché tutti i motori lo leggano subito.":
+    "Render the main content on the server (SSR or pre-rendering) so every search engine reads it at once.",
+  "Pagine non renderizzate": "Pages that failed to render",
+  "Il browser non ha completato il rendering: controlla errori JavaScript e tempi di caricamento.":
+    "The browser didn't finish rendering: check JavaScript errors and load times.",
+  "Parole HTML": "HTML words",
+  "Parole renderizzate": "Rendered words",
+  "Parole da JS": "Words from JS",
+  "Link HTML": "HTML links",
+  "Link renderizzati": "Rendered links",
+  "Link da JS": "Links from JS",
+  "Errore di rendering": "Rendering error",
+  "Attiva Rendering JavaScript nelle Impostazioni e avvia un nuovo crawl.": "Turn on JavaScript rendering in Settings and start a new crawl.",
+  "Rendering JavaScript": "JavaScript rendering",
+  "Analizza le pagine dopo l'esecuzione di JavaScript con {browser}. Più lento: il browser apre ogni pagina, 4 alla volta.":
+    "Analyses pages after JavaScript runs, using {browser}. Slower: the browser opens every page, 4 at a time.",
+  "Serve Google Chrome, Chromium, Brave o Edge installato.": "Requires Google Chrome, Chromium, Brave or Edge.",
   "Codice non valido": "Invalid code",
   "Senza return link": "Missing return link",
   "Alternative non 200": "Non-200 alternates",

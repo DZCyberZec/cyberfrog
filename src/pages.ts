@@ -29,6 +29,12 @@ export type Page = {
   simhash: string | null;
   /** Internal PageRank scaled to 0–100. */
   link_score: number;
+  /** Analysed after JavaScript rendering. */
+  rendered: boolean;
+  /** Words and distinct link targets before rendering; null when rendering was off. */
+  raw_word_count: number | null;
+  raw_links: number | null;
+  render_error: string | null;
 };
 
 /** Mirrors `report::ExternalLink`, `BrokenLink`, `LinkRow` and `PageLinks` in src-tauri/src/report.rs. */
@@ -315,6 +321,32 @@ export const PERF_FILTERS: FilterDef<Page>[] = [
   { id: "heavy", label: tr("HTML oltre 512 KB"), test: (p) => isHtmlPage(p) && (p.size_bytes ?? 0) > HEAVY_PAGE_BYTES },
 ];
 
+/** Words that exist only after JavaScript ran; null when the page wasn't rendered. */
+export function jsWords(p: Page): number | null {
+  return p.rendered && p.raw_word_count !== null ? (p.word_count ?? 0) - p.raw_word_count : null;
+}
+
+/** Link targets that exist only after JavaScript ran; null when the page wasn't rendered. */
+export function jsLinks(p: Page): number | null {
+  return p.rendered && p.raw_links !== null ? p.outlinks + p.external_outlinks - p.raw_links : null;
+}
+
+/** Below this, extra rendered words are usually widgets or cookie banners, not content. */
+const JS_WORDS_MIN = 50;
+
+export const JS_FILTERS: FilterDef<Page>[] = [
+  { id: "all", label: tr("Tutti"), test: (p) => p.rendered || p.render_error !== null },
+  { id: "rendered", label: tr("Pagine renderizzate"), test: (p) => p.rendered },
+  {
+    id: "js-content",
+    label: tr("Contenuto aggiunto da JavaScript"),
+    // a fifth of the text, so long pages with a small JS widget don't count
+    test: (p) => (jsWords(p) ?? 0) >= Math.max(JS_WORDS_MIN, (p.word_count ?? 0) / 5),
+  },
+  { id: "js-links", label: tr("Link aggiunti da JavaScript"), test: (p) => (jsLinks(p) ?? 0) > 0 },
+  { id: "errors", label: tr("Errori di rendering"), test: (p) => p.render_error !== null },
+];
+
 /** Median response time of pages that answered, or null when none did. */
 export function medianMs(pages: Page[]): number | null {
   const times = pages.map((p) => p.response_ms).filter((t): t is number => t !== null).sort((a, b) => a - b);
@@ -524,6 +556,9 @@ export const ISSUES: IssueDef[] = [
   { tab: "broken", filter: "external", priority: "Media", label: tr("Link esterni rotti"), fix: tr("Aggiorna o rimuovi i link verso siti che non rispondono più.") },
   { tab: "images", filter: "large", priority: "Media", label: tr("Immagini oltre 100 KB"), fix: tr("Comprimi o converti in WebP/AVIF per velocizzare le pagine.") },
   { tab: "images", filter: "missing-alt", priority: "Media", label: tr("Immagini senza alt"), fix: tr("Aggiungi un testo alternativo descrittivo (o alt=\"\" se decorativa).") },
+  { tab: "js", filter: "js-links", priority: "Media", label: tr("Link visibili solo dopo il rendering JavaScript"), fix: tr("Metti i link importanti nell'HTML del server: Google li trova solo dopo il rendering, più tardi e non sempre.") },
+  { tab: "js", filter: "js-content", priority: "Bassa", label: tr("Contenuto visibile solo dopo il rendering JavaScript"), fix: tr("Rendi il contenuto principale lato server (SSR o pre-rendering) perché tutti i motori lo leggano subito.") },
+  { tab: "js", filter: "errors", priority: "Bassa", label: tr("Pagine non renderizzate"), fix: tr("Il browser non ha completato il rendering: controlla errori JavaScript e tempi di caricamento.") },
   { tab: "perf", filter: "slow", priority: "Media", label: tr("Pagine con risposta oltre 1 s"), fix: tr("Attiva cache e verifica hosting e query lente.") },
   { tab: "sitemap", filter: "orphan", priority: "Media", label: tr("Pagine orfane"), fix: tr("Linka queste pagine da altre pagine del sito.") },
   { tab: "sitemap", filter: "non-indexable", priority: "Media", label: tr("URL non indicizzabili nella sitemap"), fix: tr("La sitemap deve contenere solo pagine indicizzabili con risposta 200.") },
@@ -602,6 +637,7 @@ export function allIssues(d: CrawlSnapshot, dups: DupPage[] = []): Issue[] {
     images: { rows: d.images, filters: IMAGE_FILTERS },
     sitemap: { rows: d.pages, filters: SITEMAP_FILTERS },
     perf: { rows: d.pages, filters: PERF_FILTERS },
+    js: { rows: d.pages, filters: JS_FILTERS },
     hreflang: { rows: hreflangPages(d.pages, d.hreflang), filters: HREFLANG_FILTERS },
     schema: { rows: schema, filters: schemaFilters(schema) },
     duplicates: { rows: dups, filters: DUP_FILTERS },

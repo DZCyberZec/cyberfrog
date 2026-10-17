@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { DEFAULT_SETTINGS, USER_AGENTS, type RuleSpec, type Settings } from "./settings";
+import { invoke } from "@tauri-apps/api/core";
 import { tr } from "./i18n";
 
 type Props = {
@@ -15,6 +16,11 @@ const CUSTOM = "custom";
 export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState(settings);
+  // undefined while unknown, null when no Chromium-based browser is installed
+  const [browser, setBrowser] = useState<string | null>();
+  useEffect(() => {
+    if (open) invoke<string | null>("find_browser").then(setBrowser, () => setBrowser(null));
+  }, [open]);
   const preset = USER_AGENTS.find((u) => u.value === draft.user_agent)?.id ?? CUSTOM;
 
   useEffect(() => {
@@ -105,6 +111,16 @@ export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
           <Check label={tr("Verifica i link esterni")} checked={draft.check_external} onChange={(v) => set("check_external", v)} />
           <Check label={tr("Verifica peso e stato delle immagini")} checked={draft.check_images} onChange={(v) => set("check_images", v)} />
           <Check label={tr("Leggi le sitemap XML")} checked={draft.use_sitemaps} onChange={(v) => set("use_sitemaps", v)} />
+          <Check label={tr("Rendering JavaScript")} checked={draft.render_js} onChange={(v) => set("render_js", v)} />
+          {browser !== undefined && (
+            <small>
+              {browser
+                ? tr("Analizza le pagine dopo l'esecuzione di JavaScript con {browser}. Più lento: il browser apre ogni pagina, 4 alla volta.", {
+                    browser: browser.split("/").pop() ?? browser,
+                  })
+                : tr("Serve Google Chrome, Chromium, Brave o Edge installato.")}
+            </small>
+          )}
         </fieldset>
 
         <fieldset>

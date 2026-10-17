@@ -99,8 +99,11 @@ claude mcp add cyberfrog -- /Applications/CyberFrog.app/Contents/MacOS/cyberfrog
 |---|---|
 | `crawl_site` | Crawls a site (default limit 500 URLs) and returns an SEO summary; optional custom extraction/search rules, JavaScript rendering (`render_js`) and list mode (`urls`) |
 | `list_crawls` | Lists saved crawls, newest first |
-| `crawl_summary` | Status codes, indexability, title/meta/H1 problems, broken links, slow pages, images |
+| `crawl_summary` | Status codes, indexability, title/meta/H1 problems, broken links, slow pages, images, plus GEO and topics counts |
 | `query_crawl` | Runs a read-only SQL `SELECT` on a crawl (up to 200 rows) |
+| `geo_report` | AI crawler access per bot, llms.txt check, Content-Signal lines and per-page citability signals (up to 200 pages) |
+| `topics_report` | Topic clusters, cannibalization pairs and internal link suggestions (up to 200 each) |
+| `content_gap` | Compares two crawls (`mine`, `theirs`): topics the competitor covers that you don't, your strengths, and where their page goes deeper |
 | `page_details` | Metadata, inlinks and outlinks of one URL |
 
 Crawls made through MCP are saved alongside the app's crawls, so you can open them in CyberFrog too.

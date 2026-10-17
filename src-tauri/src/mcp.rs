@@ -79,7 +79,10 @@ meta_description, h1, canonical, meta_robots, word_count, x_robots_tag, response
 links(source, target, anchor, external); external(url, status, content_type, error); images(page, src, alt, has_size); \
 image_info(src, status, bytes, content_type, error); sitemap(url, file); hreflang(page, lang, href); \
 structured(page, format, kind, issue); bad_links(page, kind, raw, reason); custom_rules(name, kind, expr, attr); \
-custom(page, rule, value) — a search rule stores its match count as value. Older crawls may lack some tables.";
+custom(page, rule, value) — a search rule stores its match count as value; \
+robots_txt(origin, status, body); llms_txt(url, status, body); \
+geo(page, first_para_words, question_headings, subheadings, lists, tables, stats, has_author, has_date, js_shell); \
+keywords(page, term, count). Older crawls may lack some tables.";
 
 fn tools() -> Value {
     let crawl_arg = json!({"type": "string", "description": "Path of a crawl file from list_crawls. Defaults to the most recent crawl."});
@@ -130,6 +133,27 @@ fn tools() -> Value {
             }, "required": ["sql"]}
         },
         {
+            "name": "geo_report",
+            "title": "GEO report: AI answer engine readiness",
+            "description": format!("Can AI answer engines reach and quote the site? Per AI crawler (token, owner, purpose, blocked_pages) what robots.txt allows, the llms.txt status and format check, Content-Signal lines, and per-page citability signals (up to {MAX_ROWS} pages). Empty for crawls saved before GEO data existed."),
+            "inputSchema": {"type": "object", "properties": {"crawl": crawl_arg}}
+        },
+        {
+            "name": "topics_report",
+            "title": "Topics and internal links",
+            "description": format!("Topic clusters, cannibalization pairs (pages competing for the same topic) and internal link suggestions, from page text similarity. Each list is capped at {MAX_ROWS} items."),
+            "inputSchema": {"type": "object", "properties": {"crawl": crawl_arg}}
+        },
+        {
+            "name": "content_gap",
+            "title": "Content gap between two crawls",
+            "description": format!("Compare your crawl with a competitor's: topics they cover that you don't (gaps), topics only you cover (strengths) and subjects where their page is much longer (deeper). Each list is capped at {MAX_ROWS} items."),
+            "inputSchema": {"type": "object", "properties": {
+                "mine": {"type": "string", "description": "Path of your crawl file from list_crawls"},
+                "theirs": {"type": "string", "description": "Path of the competitor's crawl file from list_crawls"}
+            }, "required": ["mine", "theirs"]}
+        },
+        {
             "name": "page_details",
             "title": "Page details and links",
             "description": "One crawled URL: its metadata plus inlinks and outlinks with anchor text and status.",
@@ -156,6 +180,15 @@ async fn call_tool(params: &Value, dir: &Path) -> Value {
             .and_then(|p| query(&p, str_arg(&args, "sql").unwrap_or_default())),
         "page_details" => crawl_path(&args, dir)
             .and_then(|p| page_details(&p, str_arg(&args, "url").unwrap_or_default())),
+        "geo_report" => crawl_path(&args, dir).and_then(|p| {
+            let geo = crate::geo::read(&p).map_err(|e| e.to_string())?;
+            capped(&geo, &["pages"])
+        }),
+        "topics_report" => crawl_path(&args, dir).and_then(|p| {
+            let topics = crate::topics::analyze(&p).map_err(|e| e.to_string())?;
+            capped(&topics, &["clusters", "cannibal", "suggestions"])
+        }),
+        "content_gap" => content_gap(&args, dir),
         _ => Err(format!("Unknown tool: {name}")),
     };
     match outcome {
@@ -258,10 +291,21 @@ fn list_crawls(dir: &Path) -> Result<Value, String> {
     Ok(Value::Array(crawls.into_iter().map(|(_, v)| v).collect()))
 }
 
+/// The tools open whatever SQLite file they are given, so a crawl must live in the crawls folder.
+fn inside(path: &str, dir: &Path) -> Result<PathBuf, String> {
+    let file = std::fs::canonicalize(path).map_err(|e| format!("{path}: {e}"))?;
+    let root = std::fs::canonicalize(dir).map_err(|e| format!("No crawls yet ({e})"))?;
+    if file.starts_with(root) {
+        Ok(file)
+    } else {
+        Err(format!("{path} is not in the crawls folder."))
+    }
+}
+
 /// The crawl named in `args`, or the most recent one.
 fn crawl_path(args: &Value, dir: &Path) -> Result<PathBuf, String> {
     if let Some(p) = str_arg(args, "crawl") {
-        return Ok(PathBuf::from(p));
+        return inside(p, dir);
     }
     let latest = list_crawls(dir)?;
     latest
@@ -299,6 +343,29 @@ SELECT
   (SELECT CAST(avg(response_ms) AS INTEGER) FROM pages WHERE response_ms IS NOT NULL)
 ";
 
+/// Report data as JSON with the named lists cut to `MAX_ROWS`; `truncated` lists the ones that were.
+fn capped(data: &impl serde::Serialize, lists: &[&str]) -> Result<Value, String> {
+    let mut v = serde_json::to_value(data).map_err(|e| e.to_string())?;
+    let mut truncated = Vec::new();
+    for key in lists {
+        if let Some(list) = v.get_mut(*key).and_then(Value::as_array_mut)
+            && list.len() > MAX_ROWS
+        {
+            list.truncate(MAX_ROWS);
+            truncated.push(*key);
+        }
+    }
+    v["truncated"] = json!(truncated);
+    Ok(v)
+}
+
+fn content_gap(args: &Value, dir: &Path) -> Result<Value, String> {
+    let path = |key: &str| inside(str_arg(args, key).ok_or(format!("{key} is required"))?, dir);
+    let gap = crate::topics::gap::content_gap(&path("mine")?, &path("theirs")?)
+        .map_err(|e| e.to_string())?;
+    capped(&gap, &["gaps", "strengths", "deeper"])
+}
+
 fn summarize(path: &Path) -> Result<Value, String> {
     let db = crawler::open_existing(path).map_err(|e| e.to_string())?;
     let n = |v: rusqlite::Result<i64>| v.unwrap_or(0);
@@ -334,6 +401,17 @@ fn summarize(path: &Path) -> Result<Value, String> {
         "sizes_checked": images.iter().any(|i| i.status.is_some()),
         "over_100_kb": images.iter().filter(|i| i.bytes.unwrap_or(0) > 100 * 1024).count(),
         "missing_alt": images.iter().filter(|i| i.missing_alt > 0).count(),
+    });
+    let geo = crate::geo::read(path).map_err(|e| e.to_string())?;
+    summary["geo"] = json!({
+        "ai_bots_blocked_on_some_page": geo.bots.iter().filter(|b| b.blocked_pages > 0).count(),
+        "llms_txt_present": geo.llms.is_some_and(|l| l.status == Some(200)),
+    });
+    let topics = crate::topics::analyze(path).map_err(|e| e.to_string())?;
+    summary["topics"] = json!({
+        "clusters": topics.clusters.len(),
+        "cannibal_pairs": topics.cannibal.len(),
+        "link_suggestions": topics.suggestions.len(),
     });
     Ok(summary)
 }
@@ -459,6 +537,9 @@ mod tests {
                 "list_crawls",
                 "crawl_summary",
                 "query_crawl",
+                "geo_report",
+                "topics_report",
+                "content_gap",
                 "page_details"
             ]
         );
@@ -524,5 +605,93 @@ mod tests {
             ),
             (Some("A"), Some(404))
         );
+    }
+
+    #[tokio::test]
+    async fn reports_geo_topics_and_gaps() {
+        let dir = temp_dir("reports");
+        let path = sample_crawl(&dir);
+        let db = crawler::open_db(&path).unwrap();
+        db.execute_batch(
+            "INSERT INTO robots_txt (origin, status, body) VALUES ('https://s.it', 200, 'User-agent: GPTBot\nDisallow: /a');
+             INSERT INTO llms_txt (url, status, body) VALUES ('https://s.it/llms.txt', 404, NULL);
+             INSERT INTO geo VALUES ('https://s.it/', 40, 1, 2, 0, 0, 1, 0, 1, 0), ('https://s.it/a', 10, 0, 0, 0, 0, 0, 0, 0, 0);",
+        )
+        .unwrap();
+
+        let (err, g) = call(&dir, "geo_report", json!({"crawl": path})).await;
+        assert!(!err, "{g}");
+        let gptbot = g["bots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|b| b["token"] == "GPTBot")
+            .unwrap();
+        assert_eq!(gptbot["blocked_pages"], 1);
+        assert_eq!(g["pages"].as_array().unwrap().len(), 2);
+        assert_eq!(g["llms"]["status"], 404);
+
+        let (err, s) = call(&dir, "crawl_summary", json!({})).await;
+        assert!(!err, "{s}");
+        assert_eq!(
+            s["geo"],
+            json!({"ai_bots_blocked_on_some_page": 1, "llms_txt_present": false})
+        );
+        assert!(s["topics"]["clusters"].is_u64());
+
+        let (err, t) = call(&dir, "topics_report", json!({"crawl": path})).await;
+        assert!(!err, "{t}");
+        assert_eq!(t["analysed"], 2);
+        let (err, gap) = call(&dir, "content_gap", json!({"mine": path, "theirs": path})).await;
+        assert!(!err, "{gap}");
+        assert!(gap["gaps"].is_array());
+        let (err, _) = call(&dir, "content_gap", json!({"mine": path})).await;
+        assert!(err, "theirs is required");
+
+        // crawls saved before GEO and keywords existed give empty data, not an error
+        db.execute_batch(
+            "DROP TABLE geo; DROP TABLE robots_txt; DROP TABLE llms_txt; DROP TABLE keywords;",
+        )
+        .unwrap();
+        let (err, g) = call(&dir, "geo_report", json!({})).await;
+        assert!(!err, "{g}");
+        assert_eq!(
+            (
+                g["pages"].as_array().unwrap().len(),
+                g["bots"].as_array().unwrap().len()
+            ),
+            (0, 0)
+        );
+        let (err, t) = call(&dir, "topics_report", json!({})).await;
+        assert!(!err, "{t}");
+        let (err, s) = call(&dir, "crawl_summary", json!({})).await;
+        assert!(!err, "{s}");
+        assert_eq!(s["geo"]["llms_txt_present"], false);
+
+        // only files inside the crawls folder can be read
+        let outside = temp_dir("outside");
+        let elsewhere = sample_crawl(&outside);
+        for tool in [
+            "geo_report",
+            "topics_report",
+            "crawl_summary",
+            "query_crawl",
+            "page_details",
+        ] {
+            let (err, _) = call(
+                &dir,
+                tool,
+                json!({"crawl": elsewhere, "sql": "SELECT 1", "url": "x"}),
+            )
+            .await;
+            assert!(err, "{tool} must refuse a crawl outside the crawls folder");
+        }
+        let (err, _) = call(
+            &dir,
+            "content_gap",
+            json!({"mine": path, "theirs": elsewhere}),
+        )
+        .await;
+        assert!(err);
     }
 }

@@ -16,10 +16,11 @@ CyberFrog è un crawler SEO desktop: una ricostruzione **clean-room** di Screami
 | Parte | Tecnologia |
 |---|---|
 | App desktop | Tauri 2 (macOS arm64; bundle id `com.cyberzec.cyberfrog`) |
-| Crawler | Rust: tokio, reqwest (rustls), scraper, texting_robots, regex, serde_json |
+| Crawler | Rust: tokio, reqwest (rustls), scraper, texting_robots, regex, serde_json; Chromium headless opzionale per il rendering JS |
+| AI | Claude Messages API via reqwest, chiave nel Portachiavi macOS |
 | Storage | SQLite (rusqlite bundled), un file `.sqlite` per crawl in `~/Library/Application Support/com.cyberzec.cyberfrog/crawls/` |
 | UI | React 19 + TypeScript + Vite, TanStack Table **v9** (API nuova: `useTable`, `tableFeatures`, `table.FlexRender`) + TanStack Virtual |
-| Lingua UI | Italiano (inglese previsto) |
+| Lingua UI | Italiano e inglese (`src/i18n.ts`, selettore IT/EN) |
 
 ## Struttura
 
@@ -45,50 +46,52 @@ docs/clean-room-map.md     funzionalità di riferimento
 
 **Compatibilità:** i crawl salvati con versioni precedenti restano apribili. Per le colonne nuove `read_pages` usa `newer(...)` e `report.rs` usa `compiles(...)`. Ogni colonna nuova deve seguire questo schema.
 
-## Funzionalità fatte (tutte con commit su `main`, solo in locale)
+## Dove siamo (v0.4.0, 2026-10-17)
 
-1. **MVP:** crawl dello stesso host, robots.txt, redirect, concorrenza, SQLite, tab Interni/Codici di risposta/Title/Meta description/H1 con filtri (mancante/duplicato/lungo/corto), export CSV (`;`, BOM, protezione dalle formule), Apri/Salva come/Crawl recenti, avanzamento live.
-2. **Indicizzabilità:** noindex/nofollow (meta + X-Robots-Tag), canonical (auto, mancante, verso URL non 200).
-3. **Link:** link esterni verificati (HEAD, poi GET se HEAD dà errore, perché Google risponde 404 a HEAD), link rotti con pagina di origine e anchor, pannello Inlink/Outlink.
-4. **Immagini:** alt mancante/vuoto, width/height, peso (oltre 100 KB), pannello con le pagine che le usano.
-5. **Sitemap XML:** lettura da robots.txt o `/sitemap.xml` (con indici), URL presenti solo in sitemap, orfane, generazione di `sitemap.xml`.
-6. **Impostazioni:** limite URL, concorrenza, user agent (CyberFrog/Googlebot/Bingbot/personalizzato), robots on/off, verifiche on/off, esclusioni regex.
-7. **Prestazioni:** tempo di risposta e peso pagina, tempo mediano.
-8. **Hreflang:** codice non valido, senza return link, alternative non 200, senza auto-riferimento, senza x-default.
-9. **Dati strutturati:** JSON-LD (anche `@graph`) e microdata; JSON non valido; proprietà richieste da Google mancanti per alcuni tipi.
-10. **Contenuti duplicati:** `content_hash` (FNV-1a) e SimHash a 64 bit del testo principale (senza nav e footer). Tab Duplicati con duplicati esatti, quasi duplicati (≥ 90%, al massimo 6 bit diversi) e contenuto scarso (< 200 parole), solo su pagine indicizzabili. Confronto di tutte le coppie in TS: va bene fino a ~10k pagine.
-11. **Branding e controllo:** sottotitolo "Another SEO Tool", barra di stato sempre visibile con "Powered by Daniele Zecca – CyberZec" (scudo CyberZec in `src/assets/`, apre cyberzec.it), pulsante **Stop** (flag condiviso `CrawlStop`, i dati raccolti restano).
-13. **v0.2.0 (ispirata a Screaming Frog 24, da note pubbliche):** link non scansionabili e URL non validi (tab + 2 problemi); confronto tra crawl (tab Confronto, automatico col crawl precedente dello stesso host, menu per cambiarlo; `compareCrawls`/`allIssues` in `src/pages.ts`); server MCP integrato `cyberfrog --mcp` (`src-tauri/src/mcp.rs`: crawl_site, list_crawls, crawl_summary, query_crawl in sola lettura, page_details).
-14. **v0.3.0:** estrazione personalizzata e ricerca nel sorgente (regole CSS/regex/search in Impostazioni e in `crawl_site` MCP, tab Personalizzati, tabelle `custom_rules`/`custom`), report catene di redirect (`redirectChains`), barra laterale a gruppi al posto dei tab, header e barra di stato fissi. Dalla v0.3 i messaggi di commit sono in inglese.
-15. **v0.4.0:** Link Score (PageRank interno 0–100, `report::link_scores`), vista Struttura (profondità + albero cartelle), rendering JavaScript opzionale (`Renderer` in crawler.rs: Chrome/Chromium/Brave/Edge headless `--dump-dom`, max 4 insieme, profilo temporaneo, timeout 30 s; colonne `rendered`, `raw_word_count`, `raw_links`, `render_error`; report JavaScript), assistente AI con la chiave Anthropic dell'utente (title/meta, spiegazione problemi, piano d'azione).
-12. **Tab Problemi** (predefinito): elenco di tutti i problemi con priorità Alta/Media/Bassa, numero di URL e cosa fare. Clic → apre il report con il filtro già selezionato (`ISSUES` in `src/pages.ts`). Title/meta/H1 e canonical mancante sono valutati solo sulle pagine indicizzabili.
+App pubblicata: https://github.com/DZCyberZec/cyberfrog (Apache-2.0), ultima release [v0.4.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.4.0) con DMG per Apple silicon. Installata in `/Applications/CyberFrog.app`. 23 test Rust + `scripts/pages.check.ts`, clippy pulito.
 
-## Roadmap
+### Fatto
 
-**Prossime funzioni SEO (candidate):**
-- header di sicurezza (HSTS, CSP, X-Frame-Options), contenuto misto
-- integrazioni Google Search Console / PageSpeed Insights (richiedono credenziali: chiedere all'utente)
-- grafo visuale dei link interni (force-directed)
-- crawl pianificati e report programmati
-- assistente AI: provarlo con una chiave vera (in sviluppo testato solo con un mock dell'API)
+| Versione | Funzionalità |
+|---|---|
+| 0.1.0 | Crawl stesso host (robots.txt, redirect, concorrenza, Stop), SQLite per crawl, Interni / Codici di risposta / Title / Meta description / H1 con filtri, indicizzabilità (noindex, canonical, X-Robots-Tag), link esterni e rotti, pannello Inlink/Outlink, immagini (alt, dimensioni, peso), sitemap XML (lettura, orfane, generazione), impostazioni (limite, velocità, user agent, esclusioni), prestazioni, hreflang, dati strutturati, contenuti duplicati (hash + SimHash), tab Problemi con priorità, export CSV, interfaccia IT/EN, icona, branding "Powered by Daniele Zecca – CyberZec" |
+| 0.2.0 | Link non scansionabili, confronto tra crawl (automatico col precedente), server MCP `cyberfrog --mcp` |
+| 0.3.0 | Estrazione personalizzata e ricerca nel sorgente (CSS / regex / testo), catene di redirect, barra laterale a gruppi |
+| 0.4.0 | Link Score (PageRank interno 0–100), vista Struttura (profondità + albero cartelle), rendering JavaScript opzionale (Chrome/Chromium/Brave/Edge headless, report JavaScript), assistente AI con Claude (title/meta, spiegazione problemi, piano d'azione; chiave nel Portachiavi), limite URL che non scende più a 1 da solo, home con solo gli ultimi 5 crawl |
 
-**Pubblicato (2026-10-17):** repo pubblico https://github.com/DZCyberZec/cyberfrog (Apache-2.0), release [v0.1.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.1.0) con il DMG per Apple silicon. Commit con l'indirizzo noreply di GitHub (`git config user.email` locale già impostato): non usare l'email personale. Fatti anche icona (rana disegnata in `branding/cyberfrog-icon.svg`), interfaccia IT/EN (`src/i18n.ts`: aggiungi ogni testo nuovo al dizionario `EN`, il self-check lo verifica), README in inglese con screenshot in `docs/screenshots/`.
+Dettagli tecnici utili:
+- Colonne nuove nei crawl: leggerle con `newer(...)` in `read_pages` o `compiles(...)` in `report.rs`, così i crawl vecchi restano apribili.
+- Problemi: `ISSUES` in `src/pages.ts`; `allIssues`, `pageIssues`, `withExamples` usano gli stessi report.
+- Rendering JS: `Renderer` in `crawler.rs` (`--dump-dom`, max 4 browser, profilo temporaneo, timeout 30 s).
+- AI: `src-tauri/src/ai.rs` (modello `claude-opus-5-5`, `fallbacks: "default"`), prompt in `src/ai.ts`.
 
-**Per una nuova versione:** alza la versione in `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`, poi `npx tauri build`, poi `gh release create vX.Y.Z src-tauri/target/release/bundle/dmg/*.dmg`.
+### Da verificare
 
-**Note:** l'assistente AI non è stato provato con una chiave reale (nessuna sul Mac di sviluppo): richieste e errori sono coperti da test contro un server locale. cyberzec.it è renderizzato lato server: con il rendering JS non cambia nulla, come atteso.
+- **Assistente AI con una chiave vera:** testato solo contro un server finto locale (sul Mac non c'è una chiave). Prima prova: Impostazioni → Assistente AI → incolla la chiave → Interni → clic su una pagina → tab "Assistente AI".
+- Rendering JS su un sito che usa davvero JavaScript (React/Vue): cyberzec.it è server-side, quindi lì non cambia nulla.
 
-**Rifinitura e pubblicazione** (fatte, vedi sopra; resta da fare):
-1. Logo/icona dell'app: chiedere all'utente la direzione grafica, poi `npx tauri icon <png 1024>`.
-2. Interfaccia IT/EN con selettore di lingua.
-3. README in inglese, con screenshot e nota clean-room.
-4. Licenza da scegliere con l'utente: **Apache-2.0** (attribuzione + NOTICE, permessi anche usi chiusi) oppure **GPL-3.0** (i derivati devono restare open source).
-5. Pubblicazione sul GitHub dell'utente, **solo dopo il suo ok esplicito**.
-6. Valutare il nome: "CyberFrog" somiglia a "Screaming Frog", quindi fare un controllo sul marchio o scegliere un nome diverso.
+## Roadmap (cosa manca)
+
+**Prossime funzioni, in ordine di valore:**
+1. **Header di sicurezza e contenuto misto:** HSTS, CSP, X-Frame-Options, risorse http su pagine https. Basso sforzo, solo crawler e report.
+2. **Grafo visuale dei link interni** (force-directed, colorato per Link Score o profondità).
+3. **Google Search Console e PageSpeed Insights:** clic, impressioni e Core Web Vitals per URL. Richiedono le credenziali dell'utente: chiedere prima.
+4. **Crawl pianificati e report automatici** (es. ogni lunedì, con confronto e avviso se compaiono problemi nuovi).
+5. **Assistente AI in blocco:** title/meta suggeriti per tutte le pagine con problemi, esportabili in CSV (Batch API, costo 50% più basso).
+6. **Ortografia e leggibilità** dei testi, **accessibilità** di base (lang, label, contrasto).
+7. **Spider di liste:** scansionare solo un elenco di URL incollato, senza seguire i link.
+
+**Distribuzione:**
+- Firma e notarizzazione Apple (serve un account Apple Developer dell'utente, 99 $/anno): oggi macOS chiede "Apri comunque" al primo avvio.
+- Build per Mac Intel e Windows (oggi solo Apple silicon).
+- Aggiornamenti automatici dell'app (plugin updater di Tauri).
+
+**Per una nuova versione:** alza la versione in `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`, `npx tauri build`, chiudi l'app con `pkill -x cyberfrog` (il processo è minuscolo), copia in `/Applications`, poi `gh release create vX.Y.Z src-tauri/target/release/bundle/dmg/*.dmg --notes-file <note in inglese>`.
 
 ## Come lavorare (preferenze dell'utente)
 
-- Lavorare **in autonomia**: sviluppare, testare da soli, fare commit locale, passare alla funzione successiva senza chiedere "procedo?". Fermarsi solo per decisioni vere (push, servizi a pagamento, credenziali, logo, licenza).
+- Commit e note di release **in inglese**, risposte in chat in italiano. Mai force-push senza richiesta esplicita.
+- Lavorare **in autonomia**: sviluppare, testare da soli, fare commit, passare alla funzione successiva senza chiedere "procedo?". Fermarsi solo per decisioni vere (push, servizi a pagamento, credenziali, logo, licenza).
 - Rispondere in **italiano**: prima l'azione, passi numerati e brevi, stato sempre esplicito.
 - Codice minimo e completo (stile "ponytail"): niente astrazioni non richieste. I `shortcut:` nei commenti segnano limiti noti.
 

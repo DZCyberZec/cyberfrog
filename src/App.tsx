@@ -8,6 +8,7 @@ import { DataTable, helperFor } from "./DataTable";
 import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
 import { SettingsDialog } from "./SettingsDialog";
+import { ListDialog, countUrls } from "./ListDialog";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
 import { planPrompt } from "./ai";
 import { SiteStructure } from "./SiteStructure";
@@ -481,6 +482,11 @@ export default function App() {
   });
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // list mode crawls only pasted URLs instead of following links from one
+  const [mode, setMode] = useState<"spider" | "list">("spider");
+  const [listText, setListText] = useState("");
+  const [listOpen, setListOpen] = useState(false);
+  const listCount = countUrls(listText);
   const [hasAiKey, setHasAiKey] = useState(false);
   useEffect(() => {
     invoke<boolean>("ai_has_key").then(setHasAiKey, () => setHasAiKey(false));
@@ -543,6 +549,10 @@ export default function App() {
 
   async function start(e: FormEvent) {
     e.preventDefault();
+    if (mode === "list" && listCount === 0) {
+      setListOpen(true);
+      return;
+    }
     setRunning(true);
     setError(null);
     setNotice(null);
@@ -553,7 +563,8 @@ export default function App() {
     onProgress.onmessage = setProgress;
     const t0 = performance.now();
     try {
-      const data = await invoke<CrawlData>("start_crawl", { url, settings, onProgress });
+      const list = mode === "list" ? listText : null;
+      const data = await invoke<CrawlData>("start_crawl", { url, settings, list, onProgress });
       show(data);
       setElapsed((performance.now() - t0) / 1000);
       // a low limit saved by mistake looks like a broken crawl, so say why it stopped
@@ -700,15 +711,31 @@ export default function App() {
           <label htmlFor="start-url" className="visually-hidden">
             {tr("URL di partenza")}
           </label>
-          <input
-            id="start-url"
-            type="url"
-            required
-            value={url}
-            onChange={(e) => setUrl(e.currentTarget.value)}
-            placeholder={tr("https://esempio.it")}
+          <select
+            className="mode"
+            value={mode}
+            onChange={(e) => setMode(e.currentTarget.value as "spider" | "list")}
             disabled={running}
-          />
+            aria-label={tr("Modalità")}
+          >
+            <option value="spider">{tr("Sito")}</option>
+            <option value="list">{tr("Lista URL")}</option>
+          </select>
+          {mode === "spider" ? (
+            <input
+              id="start-url"
+              type="url"
+              required
+              value={url}
+              onChange={(e) => setUrl(e.currentTarget.value)}
+              placeholder={tr("https://esempio.it")}
+              disabled={running}
+            />
+          ) : (
+            <button type="button" className="list-pick" onClick={() => setListOpen(true)} disabled={running}>
+              {listCount ? tr("{n} URL in lista · modifica", { n: listCount }) : tr("Incolla gli URL…")}
+            </button>
+          )}
           {running ? (
             <button type="button" className="stop" onClick={stopCrawl} disabled={stopped}>
               {stopped ? tr("Interruzione…") : tr("Stop")}
@@ -740,6 +767,15 @@ export default function App() {
         </div>
       </header>
       <div className={`progress ${running ? "on" : ""}`} aria-hidden />
+      <ListDialog
+        open={listOpen}
+        text={listText}
+        onSave={(t) => {
+          setListText(t);
+          setListOpen(false);
+        }}
+        onClose={() => setListOpen(false)}
+      />
       <SettingsDialog
         open={settingsOpen}
         settings={settings}

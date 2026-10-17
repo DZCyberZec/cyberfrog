@@ -52,6 +52,21 @@ struct RuleSpec {
     attr: Option<String>,
 }
 
+fn web_url(text: &str) -> Result<Url, String> {
+    let url = Url::parse(text).map_err(|e| format!("URL non valido: {e}"))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("L'URL deve iniziare con http:// o https://".into());
+    }
+    Ok(url)
+}
+
+/// URLs for list mode, one per line or separated by spaces; a bad one is reported, not skipped.
+pub(crate) fn parse_list(text: &str) -> Result<Vec<Url>, String> {
+    text.split_whitespace()
+        .map(|t| web_url(t).map_err(|e| format!("{e} ({t})")))
+        .collect()
+}
+
 /// Turns UI settings into a crawler config, clamping limits and rejecting bad patterns.
 fn config(start: Url, s: Settings) -> Result<Config, String> {
     let exclude = s
@@ -168,13 +183,16 @@ async fn start_crawl(
     app: tauri::AppHandle,
     url: String,
     settings: Settings,
+    // list mode: pasted URLs, separated by spaces or new lines
+    list: Option<String>,
     on_progress: Channel<Progress>,
     stop: tauri::State<'_, CrawlStop>,
 ) -> Result<CrawlData, String> {
-    let start = Url::parse(url.trim()).map_err(|e| format!("URL non valido: {e}"))?;
-    if !matches!(start.scheme(), "http" | "https") {
-        return Err("L'URL deve iniziare con http:// o https://".into());
-    }
+    let list = parse_list(list.as_deref().unwrap_or(""))?;
+    let start = match list.first() {
+        Some(first) => first.clone(),
+        None => web_url(url.trim())?,
+    };
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -184,6 +202,7 @@ async fn start_crawl(
     stop.0.store(false, Ordering::Relaxed);
     let cfg = Config {
         stop: stop.0.clone(),
+        list,
         ..config(start, settings)?
     };
     crawler::crawl(cfg, &db_path, |p| {
@@ -317,6 +336,15 @@ mod tests {
             rules: Vec::new(),
             render_js: false,
         }
+    }
+
+    #[test]
+    fn list_mode_urls_are_split_and_validated() {
+        let urls = parse_list("https://a.it/x\n  https://b.it/ \t\n\n").unwrap();
+        assert_eq!(urls.len(), 2);
+        assert_eq!(parse_list("").unwrap(), Vec::<Url>::new());
+        let err = parse_list("https://a.it/\nftp://b.it/").unwrap_err();
+        assert!(err.contains("ftp://b.it/"), "{err}");
     }
 
     #[test]

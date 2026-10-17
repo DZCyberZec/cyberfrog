@@ -216,6 +216,15 @@ const EN: Record<string, string> = {
   "Risposta oltre 3 s": "Response over 3 s",
   "HTML oltre 512 KB": "HTML over 512 KB",
   "Crawl fermato al limite di {n} URL impostato: puoi alzarlo in Impostazioni.": "Crawl stopped at the {n}-URL limit you set: you can raise it in Settings.",
+  // list mode
+  "Modalità": "Mode",
+  "Sito": "Website",
+  "Lista URL": "URL list",
+  "Incolla gli URL…": "Paste URLs…",
+  "{n} URL in lista · modifica": "{n} URLs in the list · edit",
+  "{n} URL": "{n} URLs",
+  "Usa questa lista": "Use this list",
+  "Incolla gli URL da analizzare, uno per riga. CyberFrog analizza solo questi e dove reindirizzano, senza seguire i link.": "Paste the URLs to check, one per line. CyberFrog checks only these and where they redirect, without following links.",
   // AI assistant
   "Claude sta scrivendo…": "Claude is writing…",
   "Aggiungi la tua chiave API Anthropic in Impostazioni per usare l'assistente AI.": "Add your Anthropic API key in Settings to use the AI assistant.",

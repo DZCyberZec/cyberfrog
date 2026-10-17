@@ -1,6 +1,6 @@
 //! Same-host breadth-first crawler that writes one row per URL to SQLite.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,6 +54,9 @@ pub struct Config {
     pub rules: Arc<Vec<CustomRule>>,
     /// Render HTML pages in a headless browser and analyse the rendered DOM.
     pub renderer: Option<Arc<Renderer>>,
+    /// List mode: crawl exactly these URLs, on any host, plus where they redirect; no links are
+    /// followed and sitemaps aren't read. Empty means spider mode from `start`.
+    pub list: Vec<Url>,
 }
 
 /// Renders pages with a locally installed Chromium-based browser in headless mode.
@@ -266,6 +269,7 @@ impl Config {
             stop: Arc::default(),
             rules: Arc::default(),
             renderer: None,
+            list: Vec::new(),
         }
     }
 }
@@ -659,7 +663,12 @@ pub async fn crawl(
         .user_agent(&cfg.user_agent)
         .timeout(Duration::from_secs(20))
         .build()?;
-    let robot = load_robots(&follow, &cfg.start, &cfg.user_agent).await;
+    // one robots.txt per origin: list mode can span several sites
+    let mut robots = HashMap::from([(
+        cfg.start.origin().ascii_serialization(),
+        load_robots(&follow, &cfg.start, &cfg.user_agent).await,
+    )]);
+    let list_mode = !cfg.list.is_empty();
     let mut db = open_db(db_path)?;
     let concurrency = cfg.concurrency.max(1);
     for rule in cfg.rules.iter() {
@@ -675,8 +684,9 @@ pub async fn crawl(
 
     // URLs listed only in a sitemap are queued once link discovery runs dry
     let mut sitemap_seed = None;
-    if cfg.use_sitemaps {
-        let listed = load_sitemaps(&follow, &cfg.start, robot.as_ref(), cfg.max_urls).await;
+    if cfg.use_sitemaps && !list_mode {
+        let robot = robots.values().next().and_then(Option::as_ref);
+        let listed = load_sitemaps(&follow, &cfg.start, robot, cfg.max_urls).await;
         let tx = db.transaction()?;
         for (url, file) in &listed {
             tx.execute(
@@ -694,10 +704,19 @@ pub async fn crawl(
         renderer: cfg.renderer.clone(),
         user_agent: cfg.user_agent.as_str().into(),
     };
-    let mut start = cfg.start.clone();
-    start.set_fragment(None);
-    let mut seen = HashSet::from([start.to_string()]);
-    let mut queue: VecDeque<(Url, Depth)> = VecDeque::from([(start, Some(0))]);
+    let seeds = if list_mode {
+        cfg.list.clone()
+    } else {
+        vec![cfg.start.clone()]
+    };
+    let mut seen = HashSet::new();
+    let mut queue: VecDeque<(Url, Depth)> = seeds
+        .into_iter()
+        .map(normalize)
+        .filter(|u| seen.insert(u.to_string()))
+        .take(cfg.max_urls)
+        .map(|u| (u, Some(0)))
+        .collect();
     let mut tasks = JoinSet::new();
     let mut written = 0;
 
@@ -708,7 +727,16 @@ pub async fn crawl(
         while tasks.len() < concurrency
             && let Some((url, depth)) = queue.pop_front()
         {
-            if cfg.respect_robots && robot.as_ref().is_some_and(|r| !r.allowed(url.as_str())) {
+            let origin = url.origin().ascii_serialization();
+            if !robots.contains_key(&origin) {
+                let robot = load_robots(&follow, &url, &cfg.user_agent).await;
+                robots.insert(origin.clone(), robot);
+            }
+            if cfg.respect_robots
+                && robots[&origin]
+                    .as_ref()
+                    .is_some_and(|r| !r.allowed(url.as_str()))
+            {
                 db.execute(
                     "INSERT OR IGNORE INTO pages (url, depth, blocked_by_robots) VALUES (?1, ?2, 1)",
                     params![url.as_str(), depth],
@@ -750,7 +778,7 @@ pub async fn crawl(
                 ..l
             })
             .filter(|l| matches!(l.url.scheme(), "http" | "https"))
-            .partition(|l| same_site(&l.url, &cfg.start));
+            .partition(|l| same_site(&l.url, &page.url));
 
         // shortcut: one transaction per page, batch several if large crawls get slow
         let tx = db.transaction()?;
@@ -847,14 +875,13 @@ pub async fn crawl(
         tx.commit()?;
         written += 1;
 
+        // list mode follows redirects anywhere (a migration often changes host) but no links
         let redirect = page
             .redirect_to
             .map(normalize)
-            .filter(|l| same_site(l, &cfg.start));
-        for link in redirect
-            .into_iter()
-            .chain(internal.into_iter().map(|l| l.url))
-        {
+            .filter(|l| list_mode || same_site(l, &cfg.start));
+        let links = if list_mode { Vec::new() } else { internal };
+        for link in redirect.into_iter().chain(links.into_iter().map(|l| l.url)) {
             if !excluded(&cfg, &link) && seen.len() < cfg.max_urls && seen.insert(link.to_string())
             {
                 queue.push_back((link, page.depth.map(|d| d + 1)));
@@ -2506,6 +2533,40 @@ mod tests {
 
         assert_eq!(crawl(cfg, &path, |_| {}).await.unwrap(), 2);
         assert_eq!(rows(&path).len(), 2);
+    }
+
+    #[tokio::test]
+    async fn list_mode_crawls_only_the_listed_urls_on_any_host() {
+        let (base, other) = (serve().await, serve().await);
+        let path = db_path("list");
+        let u = |b: &Url, p: &str| b.join(p).unwrap();
+        let cfg = Config {
+            check_external: false,
+            check_images: false,
+            list: vec![
+                u(&base, "/a"),
+                u(&base, "/a#dup"),
+                u(&base, "/old"),
+                u(&base, "/private/x"),
+                u(&other, "/private/y"),
+            ],
+            ..Config::new(base.clone())
+        };
+        crawl(cfg, &path, |_| {}).await.unwrap();
+        let got: Vec<(String, Option<u32>, Option<u16>, bool)> = rows(&path)
+            .into_iter()
+            .map(|(url, depth, status, _, blocked, _)| (url, depth, status, blocked))
+            .collect();
+        let s = |b: &Url, p: &str| u(b, p).to_string();
+        let mut want = vec![
+            (s(&base, "/a"), Some(0), Some(200), false),
+            (s(&base, "/new"), Some(1), Some(200), false), // redirects are still followed
+            (s(&base, "/old"), Some(0), Some(301), false),
+            (s(&base, "/private/x"), Some(0), None, true),
+            (s(&other, "/private/y"), Some(0), None, true), // each host's own robots.txt
+        ];
+        want.sort();
+        assert_eq!(got, want, "links on /a (/, /missing) are not followed");
     }
 
     #[tokio::test]

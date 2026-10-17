@@ -91,6 +91,7 @@ fn tools() -> Value {
     The crawl is saved and can be opened in the CyberFrog app. Only crawl sites you own or may audit.",
             "inputSchema": {"type": "object", "properties": {
                 "url": {"type": "string", "description": "Start URL, http:// or https://"},
+                "urls": {"type": "array", "items": {"type": "string"}, "description": "List mode: crawl exactly these URLs (any host) and where they redirect, following no links. Replaces url."},
                 "max_urls": {"type": "integer", "description": "URL limit, default 500, max 10000"},
                 "check_external": {"type": "boolean", "description": "Also check external links (slower). Default false."},
                 "check_images": {"type": "boolean", "description": "Also check image size and status (slower). Default false."},
@@ -105,7 +106,7 @@ fn tools() -> Value {
                     },
                     "required": ["name", "kind", "expr"]
                 }}
-            }, "required": ["url"]}
+            }}
         },
         {
             "name": "list_crawls",
@@ -170,11 +171,26 @@ fn str_arg<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
 }
 
 async fn crawl_site(args: &Value, dir: &Path) -> Result<Value, String> {
-    let start = Url::parse(str_arg(args, "url").unwrap_or_default().trim())
-        .map_err(|e| format!("Invalid URL: {e}"))?;
-    if !matches!(start.scheme(), "http" | "https") {
-        return Err("The URL must start with http:// or https://".into());
-    }
+    let web = |text: &str| -> Result<Url, String> {
+        let url = Url::parse(text.trim()).map_err(|e| format!("Invalid URL {text}: {e}"))?;
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err(format!(
+                "{text}: the URL must start with http:// or https://"
+            ));
+        }
+        Ok(url)
+    };
+    let list = args
+        .get("urls")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|u| web(u.as_str().unwrap_or_default()))
+        .collect::<Result<Vec<_>, _>>()?;
+    let start = match list.first() {
+        Some(first) => first.clone(),
+        None => web(str_arg(args, "url").unwrap_or_default())?,
+    };
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -211,6 +227,7 @@ async fn crawl_site(args: &Value, dir: &Path) -> Result<Value, String> {
         None
     };
     let cfg = Config {
+        list,
         renderer,
         rules: std::sync::Arc::new(rules),
         max_urls,

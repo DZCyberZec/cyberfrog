@@ -87,6 +87,16 @@ button { font: inherit; }
 }
 .toolbar button:hover:not(:disabled) { background: var(--accent-hover); }
 .toolbar button:disabled { opacity: 0.6; cursor: default; }
+.toolbar select.mode {
+  padding: 0 10px; font: inherit; color: var(--text); background: var(--sunken);
+  border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
+}
+.toolbar form button.list-pick {
+  flex: 1; min-width: 0; text-align: left; font-weight: 500; color: var(--text);
+  background: var(--sunken); border: 1px dashed var(--border-strong);
+}
+.toolbar form button.list-pick:hover:not(:disabled) { background: var(--surface); border-color: var(--accent); }
+dialog.list-dialog { width: min(640px, calc(100vw - 32px)); }
 .toolbar form button.stop { background: var(--client); color: #fff; }
 .toolbar form button.stop:hover:not(:disabled) { background: var(--client); filter: brightness(1.1); }
 

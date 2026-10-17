@@ -236,22 +236,22 @@ fn save_crawl_as(from: String, to: String) -> Result<(), String> {
 }
 
 /// Most recent crawls in the app data dir, newest first; unreadable files are skipped.
-/// Whether an Anthropic API key is stored in the Keychain (the key itself never leaves Rust).
+/// Which AI engines are usable: a stored API key, an installed Claude Code (never the key itself).
 #[tauri::command]
-fn ai_has_key() -> bool {
-    ai::get_key().is_some()
+fn ai_status() -> ai::Status {
+    ai::status()
 }
 
 /// Stores the API key in the Keychain; an empty key removes it.
 #[tauri::command]
 fn ai_set_key(key: String) -> Result<(), String> {
-    ai::set_key(&key)
+    ai::keychain::set_key(&key)
 }
 
-/// Asks Claude with the given system prompt and returns the answer text.
+/// Asks Claude through `engine` ("claude-code" or "api") and returns the answer text.
 #[tauri::command]
-async fn ai_complete(system: String, prompt: String) -> Result<String, String> {
-    ai::complete(&system, &prompt).await
+async fn ai_complete(engine: String, system: String, prompt: String) -> Result<String, String> {
+    ai::complete(&engine, &system, &prompt).await
 }
 
 #[tauri::command]
@@ -336,7 +336,7 @@ pub fn run() {
             list_schedules,
             add_schedule,
             remove_schedule,
-            ai_has_key,
+            ai_status,
             ai_set_key,
             ai_complete,
             write_text_file

@@ -2,22 +2,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { tr, trError } from "./i18n";
 import { systemPrompt } from "./ai";
+import type { AiEngine } from "./settings";
 
 export type AiState = { status: "idle" } | { status: "loading" } | { status: "done"; text: string } | { status: "error"; text: string };
 
 /** One Claude request at a time; an answer that arrives after a newer request (or unmount) is dropped. */
-export function useAi() {
+export function useAi(engine: AiEngine) {
   const [state, setState] = useState<AiState>({ status: "idle" });
   const seq = useRef(0);
   useEffect(() => () => void seq.current++, []);
   const run = useCallback((prompt: string) => {
     const mine = ++seq.current;
     setState({ status: "loading" });
-    invoke<string>("ai_complete", { system: systemPrompt(), prompt }).then(
+    invoke<string>("ai_complete", { engine, system: systemPrompt(), prompt }).then(
       (text) => mine === seq.current && setState({ status: "done", text }),
       (e) => mine === seq.current && setState({ status: "error", text: trError(String(e)) }),
     );
-  }, []);
+  }, [engine]);
   const reset = useCallback(() => {
     seq.current++;
     setState({ status: "idle" });
@@ -51,4 +52,4 @@ export function AiOutput({ state }: { state: AiState }) {
   );
 }
 
-export const NO_KEY_TEXT = "Aggiungi la tua chiave API Anthropic in Impostazioni per usare l'assistente AI.";
+export const NO_KEY_TEXT = "Configura l'assistente AI in Impostazioni: Claude Code oppure una chiave API.";

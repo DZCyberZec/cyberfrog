@@ -13,7 +13,11 @@ export type Settings = {
   rules: RuleSpec[];
   /** Analyse pages after JavaScript rendering in a local headless browser. */
   render_js: boolean;
+  /** Who answers the AI assistant: the user's Claude Code CLI or the Messages API with their key. */
+  ai_engine: AiEngine;
 };
+
+export type AiEngine = "claude-code" | "api";
 
 /** Mirrors `RuleSpec` in src-tauri/src/lib.rs. */
 export type RuleSpec = {
@@ -51,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   exclude: [],
   rules: [],
   render_js: false,
+  ai_engine: "claude-code",
 };
 
 const KEY = "cyberfrog.settings";

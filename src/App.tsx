@@ -11,6 +11,7 @@ import { SettingsDialog } from "./SettingsDialog";
 import { ListDialog, countUrls } from "./ListDialog";
 import { SchedulesDialog } from "./SchedulesDialog";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
+import { isAiReady, type AiStatus } from "./AiSettings";
 import { planPrompt } from "./ai";
 import { SiteStructure } from "./SiteStructure";
 import { loadSettings, saveSettings, type Settings } from "./settings";
@@ -489,11 +490,13 @@ export default function App() {
   const [listOpen, setListOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const listCount = countUrls(listText);
-  const [hasAiKey, setHasAiKey] = useState(false);
-  useEffect(() => {
-    invoke<boolean>("ai_has_key").then(setHasAiKey, () => setHasAiKey(false));
+  const [aiStatus, setAiStatus] = useState<AiStatus>({ has_key: false, claude_code: null });
+  const refreshAi = useCallback(() => {
+    invoke<AiStatus>("ai_status").then(setAiStatus, () => setAiStatus({ has_key: false, claude_code: null }));
   }, []);
-  const plan = useAi();
+  useEffect(refreshAi, [refreshAi]);
+  const aiReady = isAiReady(settings.ai_engine, aiStatus);
+  const plan = useAi(settings.ai_engine);
   const resetPlan = plan.reset;
   useEffect(resetPlan, [pages, resetPlan]); // a plan belongs to the crawl it was written for
 
@@ -791,8 +794,8 @@ export default function App() {
           setSettingsOpen(false);
         }}
         onClose={() => setSettingsOpen(false)}
-        hasAiKey={hasAiKey}
-        onAiKeyChange={setHasAiKey}
+        aiStatus={aiStatus}
+        onAiStatusChange={refreshAi}
       />
 
       {error && (
@@ -911,8 +914,8 @@ export default function App() {
                     <button
                       type="button"
                       className="secondary"
-                      disabled={!hasAiKey || issues.length === 0 || plan.state.status === "loading"}
-                      title={hasAiKey ? undefined : tr(NO_KEY_TEXT)}
+                      disabled={!aiReady || issues.length === 0 || plan.state.status === "loading"}
+                      title={aiReady ? undefined : tr(NO_KEY_TEXT)}
                       onClick={() => plan.run(planPrompt(host, pages, withExamples(issues, snapshot, dupRows)))}
                     >
                       {tr("Piano d'azione AI")}
@@ -1167,7 +1170,8 @@ export default function App() {
                   url={selected}
                   page={selectedPage}
                   issues={selectedIssues}
-                  hasAiKey={hasAiKey}
+                  aiEngine={settings.ai_engine}
+                  aiReady={aiReady}
                   onClose={() => setSelected(null)}
                   onNavigate={setSelected}
                 />

@@ -5,6 +5,7 @@ import { codeLabel, kindOf, type IssueDef, type LinkRow, type Page, type PageLin
 import { tr, trError } from "./i18n";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
 import { explainPrompt, metaPrompt } from "./ai";
+import type { AiEngine } from "./settings";
 
 const link = helperFor<LinkRow>();
 const columns = link.columns([
@@ -25,18 +26,20 @@ type Props = {
   /** The crawled page behind `url`, when there is one; the AI view needs it. */
   page: Page | undefined;
   issues: IssueDef[];
-  hasAiKey: boolean;
+  aiEngine: AiEngine;
+  /** The chosen engine is set up (Claude Code installed, or an API key stored). */
+  aiReady: boolean;
   onClose: () => void;
   /** Called with a same-site URL the user picked inside the panel. */
   onNavigate: (url: string) => void;
 };
 
 /** Inlinks and outlinks of one crawled URL, loaded on demand from the crawl file. */
-export function DetailPanel({ crawlPath, url, page, issues, hasAiKey, onClose, onNavigate }: Props) {
+export function DetailPanel({ crawlPath, url, page, issues, aiEngine, aiReady, onClose, onNavigate }: Props) {
   const [links, setLinks] = useState<PageLinks | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"inlinks" | "outlinks" | "ai">("inlinks");
-  const ai = useAi();
+  const ai = useAi(aiEngine);
   const { reset } = ai;
   useEffect(reset, [url, reset]); // an answer is about one page
 
@@ -80,7 +83,7 @@ export function DetailPanel({ crawlPath, url, page, issues, hasAiKey, onClose, o
         <div className="ai-view">
           {!page ? (
             <p className="empty">{tr("Questo URL non è stato scansionato.")}</p>
-          ) : !hasAiKey ? (
+          ) : !aiReady ? (
             <p className="empty">{tr(NO_KEY_TEXT)}</p>
           ) : (
             <>

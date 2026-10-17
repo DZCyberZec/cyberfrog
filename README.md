@@ -10,12 +10,14 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/issues.jpg" alt="CyberFrog showing the Issues report for a crawled site" width="860">
+  <img src="docs/screenshots/overview.jpg" alt="CyberFrog overview of a crawled site: SEO health score, key numbers and what to fix first" width="860">
 </p>
 
 ## Features
 
-- **Sidebar of reports** grouped by Overview, Pages, Content, Links and Resources, each with a badge showing how many issue types it has.
+- **Overview first**: after a crawl you land on an SEO health score (0–100), the key numbers and the issues to fix first; every number opens its report.
+- **Quick search (⌘K)**: jump to any report, issue or action by typing.
+- **Sidebar of reports** grouped by Overview, Pages, AI & GEO, Content, Links and Resources, each with a badge showing how many issue types it has.
 - **Issues report**: every problem found, ranked High / Medium / Low, with the number of URLs affected and how to fix it. Click an issue to jump to the matching report, already filtered.
 - **Crawling**: same-host breadth-first crawl, robots.txt (obeyed or ignored), redirects recorded, configurable speed, URL limit, user agent (CyberFrog, Googlebot, Bingbot or custom) and exclude patterns. Live progress, with a Stop button.
 - **On-page**: titles, meta descriptions and H1 (missing, duplicate, too long, too short), word count, canonical, meta robots and X-Robots-Tag.
@@ -36,7 +38,7 @@
 - **AI assistant**: Claude suggests titles and meta descriptions, explains a page's issues and writes a prioritised action plan for the whole crawl. It runs through your own [Claude Code](https://claude.com/code) (your Claude subscription, no API cost) or an Anthropic API key kept in the macOS Keychain. Page data is sent to Anthropic only when you ask.
 - **List mode**: paste a list of URLs (a migration plan, a spreadsheet column) and CyberFrog checks only those, on any site, plus where they redirect.
 - **Scheduled crawls**: every day or every week at a set time, even with the app closed. A macOS notification tells you what changed since the previous run (new and removed pages, status changes, new errors).
-- **GEO – AI visibility**: how ready the site is for AI answer engines (ChatGPT, Claude, Perplexity, AI Overviews):
+- **GEO – AI visibility**: how ready the site is for AI answer engines (ChatGPT, Claude, Perplexity, AI Overviews). [Screenshot](docs/screenshots/geo.jpg)
   - which of 12 AI crawlers robots.txt lets in, split into search, on-demand and training bots
   - llms.txt presence and format, and Content-Signal preferences
   - a 0–100 citability score per page: answer up front, question subheadings, lists and tables, facts, author, date, sources, structured data

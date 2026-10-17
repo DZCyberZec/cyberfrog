@@ -11,6 +11,7 @@ const {
 const { hasTranslation } = await import("../src/i18n.ts");
 const { pageIssues, withExamples } = await import("../src/pages.ts");
 const { systemPrompt, metaPrompt, explainPrompt, planPrompt } = await import("../src/ai.ts");
+const { healthScore } = await import("../src/health.ts");
 const { EMPTY_GEO, geoFilters, geoRows, botState, CITABILITY, PURPOSE_LABEL } = await import("../src/geo.ts");
 
 const base: Page = {
@@ -374,4 +375,9 @@ assert.deepEqual(geoPick("low"), ["/thin"]);
 assert.deepEqual(geoPick("no-author-date"), ["/thin"]);
 assert.deepEqual([botState(gd.bots[0], 3), botState(gd.bots[1], 3), botState({ ...gd.bots[0], blocked_pages: 0 }, 3)], ["partial", "closed", "open"]);
 assert.ok(allIssues({ ...snap(gp), geo: gd }).some((i) => i.label === "Pagine chiuse ai motori di ricerca AI" && i.count === 1));
+const issue = (priority: "Alta" | "Media" | "Bassa", count: number) => ({ tab: "x", filter: "y", label: "z", fix: "", priority, count });
+assert.equal(healthScore([], 100), 100);
+assert.equal(healthScore([issue("Alta", 100)], 100), 70, "a high issue on every page costs its full weight");
+assert.equal(healthScore([issue("Media", 1)], 100), 99, "one page in a hundred costs a little");
+assert.equal(healthScore([issue("Alta", 100), issue("Alta", 100), issue("Alta", 100), issue("Alta", 100)], 100), 0, "never below 0");
 console.log("pages.check: ok");

@@ -149,8 +149,9 @@ export function isHtmlPage(p: Page): boolean {
   return p.status === 200 && (p.content_type ?? "").startsWith("text/html");
 }
 
+/** Title, meta description and H1 are judged on indexable pages only, so noindex archives don't raise false duplicates. */
 export function metaRows(pages: Page[], field: MetaField): MetaRow[] {
-  const html = pages.filter(isHtmlPage);
+  const html = pages.filter((p) => isHtmlPage(p) && nonIndexableReason(p) === null);
   const counts = new Map<string, number>();
   for (const p of html) {
     const v = p[field];
@@ -224,7 +225,11 @@ export function indexFilters(pages: Page[]): FilterDef<Page>[] {
     { id: "nofollow", label: "Nofollow", test: (p) => directives(p).nofollow },
     { id: "canonicalised", label: "Canonicalizzate", test: (p) => isCanonicalised(p) },
     { id: "self", label: "Canonical auto-referenziale", test: (p) => p.canonical === p.url },
-    { id: "no-canonical", label: "Canonical mancante", test: (p) => html(p) && p.canonical === null },
+    {
+      id: "no-canonical",
+      label: "Canonical mancante",
+      test: (p) => html(p) && p.canonical === null && nonIndexableReason(p) === null,
+    },
     {
       id: "bad-canonical",
       label: "Canonical verso URL non 200",
@@ -488,3 +493,64 @@ export const DUP_FILTERS: FilterDef<DupPage>[] = [
   { id: "near", label: "Quasi duplicati (≥ 90%)", test: (d) => d.near > 0 },
   { id: "low", label: `Contenuto scarso (< ${LOW_CONTENT_WORDS} parole)`, test: (d) => (d.word_count ?? 0) < LOW_CONTENT_WORDS },
 ];
+
+export type Priority = "Alta" | "Media" | "Bassa";
+
+/** A problem worth fixing: which report and filter list the URLs, and what to do about it. */
+export type IssueDef = { tab: string; filter: string; label: string; priority: Priority; fix: string };
+
+export const ISSUES: IssueDef[] = [
+  { tab: "codes", filter: "client", priority: "Alta", label: "Pagine con errore 4xx", fix: "Ripristina la pagina o reindirizzala (301) e aggiorna i link che la puntano." },
+  { tab: "codes", filter: "server", priority: "Alta", label: "Pagine con errore 5xx", fix: "Errore del server: controlla hosting, plugin e log." },
+  { tab: "broken", filter: "internal", priority: "Alta", label: "Link interni rotti", fix: "Correggi o rimuovi i link verso pagine che non esistono." },
+  { tab: "title", filter: "missing", priority: "Alta", label: "Title mancante", fix: "Scrivi un title unico che descriva la pagina." },
+  { tab: "index", filter: "bad-canonical", priority: "Alta", label: "Canonical verso URL non 200", fix: "Punta il canonical a una pagina che risponde 200." },
+  { tab: "schema", filter: "errors", priority: "Alta", label: "Dati strutturati con JSON non valido", fix: "Correggi la sintassi del JSON-LD: Google lo ignora interamente." },
+  { tab: "hreflang", filter: "invalid", priority: "Alta", label: "Codici hreflang non validi", fix: "Usa codici lingua-regione ISO, es. it-IT, en-GB." },
+  { tab: "hreflang", filter: "no-return", priority: "Alta", label: "Hreflang senza return link", fix: "Ogni pagina alternativa deve puntare di ritorno a questa." },
+  { tab: "title", filter: "duplicate", priority: "Media", label: "Title duplicati", fix: "Rendi ogni title unico per la sua pagina." },
+  { tab: "meta_description", filter: "missing", priority: "Media", label: "Meta description mancante", fix: "Aggiungi una descrizione che inviti al clic." },
+  { tab: "meta_description", filter: "duplicate", priority: "Media", label: "Meta description duplicate", fix: "Scrivi descrizioni diverse per pagine diverse." },
+  { tab: "h1", filter: "missing", priority: "Media", label: "H1 mancante", fix: "Aggiungi un H1 con l'argomento principale della pagina." },
+  { tab: "broken", filter: "external", priority: "Media", label: "Link esterni rotti", fix: "Aggiorna o rimuovi i link verso siti che non rispondono più." },
+  { tab: "images", filter: "large", priority: "Media", label: "Immagini oltre 100 KB", fix: "Comprimi o converti in WebP/AVIF per velocizzare le pagine." },
+  { tab: "images", filter: "missing-alt", priority: "Media", label: "Immagini senza alt", fix: "Aggiungi un testo alternativo descrittivo (o alt=\"\" se decorativa)." },
+  { tab: "perf", filter: "slow", priority: "Media", label: "Pagine con risposta oltre 1 s", fix: "Attiva cache e verifica hosting e query lente." },
+  { tab: "sitemap", filter: "orphan", priority: "Media", label: "Pagine orfane", fix: "Linka queste pagine da altre pagine del sito." },
+  { tab: "sitemap", filter: "non-indexable", priority: "Media", label: "URL non indicizzabili nella sitemap", fix: "La sitemap deve contenere solo pagine indicizzabili con risposta 200." },
+  { tab: "schema", filter: "warnings", priority: "Media", label: "Dati strutturati con proprietà mancanti", fix: "Aggiungi le proprietà richieste per ottenere i risultati avanzati." },
+  { tab: "duplicates", filter: "exact", priority: "Media", label: "Contenuti duplicati", fix: "Unisci le pagine o indica la principale con un canonical." },
+  { tab: "codes", filter: "redirect", priority: "Bassa", label: "Redirect (3xx)", fix: "Aggiorna i link interni perché puntino direttamente alla destinazione." },
+  { tab: "title", filter: "long", priority: "Bassa", label: "Title oltre 60 caratteri", fix: "Accorcia: in Google verrà troncato." },
+  { tab: "title", filter: "short", priority: "Bassa", label: "Title sotto 30 caratteri", fix: "Sfrutta meglio lo spazio con parole chiave utili." },
+  { tab: "meta_description", filter: "long", priority: "Bassa", label: "Meta description oltre 155 caratteri", fix: "Accorcia: in Google verrà troncata." },
+  { tab: "meta_description", filter: "short", priority: "Bassa", label: "Meta description sotto 70 caratteri", fix: "Aggiungi dettagli e un invito all'azione." },
+  { tab: "h1", filter: "long", priority: "Bassa", label: "H1 oltre 70 caratteri", fix: "Rendi l'H1 più conciso." },
+  { tab: "duplicates", filter: "near", priority: "Bassa", label: "Contenuti quasi duplicati", fix: "Differenzia i testi o unisci le pagine simili." },
+  { tab: "duplicates", filter: "low", priority: "Bassa", label: "Contenuto scarso", fix: "Arricchisci il testo o valuta un noindex." },
+  { tab: "images", filter: "no-size", priority: "Bassa", label: "Immagini senza width/height", fix: "Indica le dimensioni per evitare spostamenti del layout (CLS)." },
+  { tab: "index", filter: "no-canonical", priority: "Bassa", label: "Canonical mancante", fix: "Aggiungi un canonical auto-referenziale." },
+  { tab: "sitemap", filter: "missing", priority: "Bassa", label: "Pagine indicizzabili non nella sitemap", fix: "Aggiungile alla sitemap se vuoi che Google le trovi." },
+  { tab: "hreflang", filter: "no-x-default", priority: "Bassa", label: "Hreflang senza x-default", fix: "Indica la versione predefinita con hreflang=\"x-default\"." },
+  { tab: "codes", filter: "blocked", priority: "Bassa", label: "URL bloccati da robots.txt", fix: "Verifica che il blocco sia voluto." },
+];
+
+export type Issue = IssueDef & { count: number };
+
+/** A report's rows and filters, keyed by tab id, as the Problemi tab counts them. */
+// each report has its own row type
+export type Reports = Record<string, { rows: any[]; filters: FilterDef<any>[] }>;
+
+const RANK: Record<Priority, number> = { Alta: 0, Media: 1, Bassa: 2 };
+
+/** Issues with at least one URL, most severe first, then by number of URLs. */
+export function countIssues(defs: IssueDef[], reports: Reports): Issue[] {
+  return defs
+    .flatMap((d) => {
+      const report = reports[d.tab];
+      const filter = report?.filters.find((f) => f.id === d.filter);
+      const count = filter ? report.rows.filter(filter.test).length : 0;
+      return count > 0 ? [{ ...d, count }] : [];
+    })
+    .sort((a, b) => RANK[a.priority] - RANK[b.priority] || b.count - a.count);
+}

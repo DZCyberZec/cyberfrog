@@ -1,7 +1,7 @@
 // Self-check for filters and CSV export. Run: node scripts/pages.check.ts
 import assert from "node:assert/strict";
 import {
-  BROKEN_FILTERS, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
+  BROKEN_FILTERS, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
 } from "../src/pages.ts";
 
 const base: Page = {
@@ -18,6 +18,7 @@ const pages: Page[] = [
   { ...base, url: "/f", title: "è".repeat(60) }, // 60 characters, not over the limit
   { ...base, url: "/404", status: 404, title: null }, // not judged
   { ...base, url: "/img", content_type: "image/png" }, // not judged
+  { ...base, url: "/tag", title: "Same title for both pages here!", meta_robots: "noindex" }, // not judged
 ];
 const pick = <T extends { url: string }>(rows: T[], filters: { id: string; test: (r: T) => boolean }[], id: string) =>
   rows.filter(filters.find((f) => f.id === id)!.test).map((r) => r.url);
@@ -73,7 +74,7 @@ assert.deepEqual(short("indexable"), ["/", "/d"]);
 assert.deepEqual(short("nofollow"), ["/c"]);
 assert.deepEqual(short("self"), ["/"]);
 assert.deepEqual(short("bad-canonical"), ["/f"], "only crawled non-200 targets");
-assert.deepEqual(short("no-canonical"), ["/a", "/b", "/c", "/d"], "HTML 200 pages only");
+assert.deepEqual(short("no-canonical"), ["/d"], "indexable HTML 200 pages only");
 assert.deepEqual(short("x-robots"), ["/b", "/pdf"]);
 const broken = [
   { source: "/s", target: "/in404", anchor: null, status: 404, error: null, external: false },
@@ -184,4 +185,30 @@ assert.equal(dups[3].similarity, 1 - 2 / 64);
 assert.deepEqual(pick(dups, DUP_FILTERS, "exact"), ["/a", "/a-copy"]);
 assert.deepEqual(pick(dups, DUP_FILTERS, "low"), ["/far"]);
 assert.deepEqual(dupPages([dp[0]]).map((d) => d.similarity), [null], "a lone page has nothing to compare with");
+const issues = countIssues(ISSUES, {
+  codes: { rows: codes, filters: CODE_FILTERS },
+  title: { rows, filters: metaFilters(CHECKS[0]) },
+});
+assert.deepEqual(
+  issues.map((i) => [i.priority, i.label, i.count]),
+  [
+    ["Alta", "Pagine con errore 4xx", 1],
+    ["Alta", "Pagine con errore 5xx", 1],
+    ["Alta", "Title mancante", 1],
+    ["Media", "Title duplicati", 2],
+    ["Bassa", "Redirect (3xx)", 1],
+    ["Bassa", "Title oltre 60 caratteri", 1],
+    ["Bassa", "Title sotto 30 caratteri", 1],
+    ["Bassa", "URL bloccati da robots.txt", 1],
+  ],
+  "only issues with URLs, severest first; reports not provided are skipped",
+);
+const tabsWithFilters: Record<string, string[]> = {
+  codes: CODE_FILTERS.map((f) => f.id), index: indexFilters([]).map((f) => f.id), broken: BROKEN_FILTERS.map((f) => f.id),
+  title: metaFilters(CHECKS[0]).map((f) => f.id), meta_description: metaFilters(CHECKS[1]).map((f) => f.id),
+  h1: metaFilters(CHECKS[2]).map((f) => f.id), images: IMAGE_FILTERS.map((f) => f.id), perf: PERF_FILTERS.map((f) => f.id),
+  sitemap: SITEMAP_FILTERS.map((f) => f.id), schema: schemaFilters([]).map((f) => f.id), hreflang: HREFLANG_FILTERS.map((f) => f.id),
+  duplicates: DUP_FILTERS.map((f) => f.id),
+};
+for (const d of ISSUES) assert.ok(tabsWithFilters[d.tab]?.includes(d.filter), `issue ${d.label} points to a real filter`);
 console.log("pages.check: ok");

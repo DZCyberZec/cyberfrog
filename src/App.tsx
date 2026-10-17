@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import cyberzecShield from "./assets/cyberzec-shield.png";
 import { DataTable, helperFor } from "./DataTable";
 import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
@@ -22,6 +24,10 @@ import {
   schemaPages,
   DUP_FILTERS,
   dupPages,
+  ISSUES,
+  countIssues,
+  type Issue,
+  type Reports,
   buildSitemapXml,
   medianMs,
   codeLabel,
@@ -224,6 +230,20 @@ const dupColumns = dup.columns([
   dup.accessor("closest", { header: "Pagina più simile", size: 380 }),
 ]);
 
+const PRIORITY_BADGE: Record<Issue["priority"], string> = { Alta: "client", Media: "redirect", Bassa: "blocked" };
+const iss = helperFor<Issue>();
+const issueColumns = iss.columns([
+  iss.accessor("priority", {
+    header: "Priorità",
+    size: 95,
+    cell: (c) => <span className={`badge ${PRIORITY_BADGE[c.getValue()]}`}>{c.getValue()}</span>,
+  }),
+  iss.accessor("label", { header: "Problema", size: 320 }),
+  iss.accessor("count", { header: "URL", size: 70, cell: (c) => num(c.getValue()) }),
+  iss.accessor((i) => TABS.find((t) => t.id === i.tab)?.label ?? i.tab, { id: "report", header: "Report", size: 150 }),
+  iss.accessor("fix", { header: "Cosa fare", size: 520 }),
+]);
+
 const meta = helperFor<MetaRow>();
 const metaTabs = CHECKS.map((check) => ({
   check,
@@ -237,6 +257,7 @@ const metaTabs = CHECKS.map((check) => ({
 }));
 
 type Tab =
+  | "issues"
   | "internal"
   | "codes"
   | "index"
@@ -250,6 +271,7 @@ type Tab =
   | "duplicates"
   | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
+  { id: "issues", label: "Problemi" },
   { id: "internal", label: "Interni" },
   { id: "codes", label: "Codici di risposta" },
   { id: "index", label: "Indicizzabilità" },
@@ -302,9 +324,17 @@ export default function App() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  /** The user pressed Stop during the last crawl. */
+  const [stopped, setStopped] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState<number | null>(null);
-  const [tab, setTab] = useState<Tab>("internal");
+  const [tab, setTab] = useState<Tab>("issues");
+  /** Set by clicking a problem: open that report with that filter. `seq` remounts the table. */
+  const [jump, setJump] = useState<{ tab: string | null; filter: string | null; seq: number }>({
+    tab: null,
+    filter: null,
+    seq: 0,
+  });
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -332,6 +362,7 @@ export default function App() {
     setError(null);
     setNotice(null);
     setElapsed(null);
+    setStopped(false);
     setProgress({ stage: "pages", done: 0, pending: 1 });
     const onProgress = new Channel<Progress>();
     onProgress.onmessage = setProgress;
@@ -346,6 +377,11 @@ export default function App() {
       setRunning(false);
       setProgress(null);
     }
+  }
+
+  function stopCrawl() {
+    setStopped(true);
+    invoke("stop_crawl").catch((err) => setError(String(err)));
   }
 
   async function openCrawl(path?: string) {
@@ -396,7 +432,8 @@ export default function App() {
 
   const hreflangRows = useMemo(() => hreflangPages(pages, hreflang), [pages, hreflang]);
   // only computed while the tab is open: it compares every pair of pages
-  const dupRows = useMemo(() => (tab === "duplicates" ? dupPages(pages) : []), [pages, tab]);
+  const needsDups = tab === "duplicates" || tab === "issues";
+  const dupRows = useMemo(() => (needsDups ? dupPages(pages) : []), [pages, needsDups]);
   const schemaRows = useMemo(() => schemaPages(pages, structured), [pages, structured]);
   const schemaTabFilters = useMemo(() => schemaFilters(schemaRows), [schemaRows]);
   const median = useMemo(() => medianMs(pages), [pages]);
@@ -404,7 +441,31 @@ export default function App() {
   const indexTabFilters = useMemo(() => indexFilters(pages), [pages]);
   const metaTab = metaTabs.find((t) => t.check.field === tab);
   const rows = useMemo(() => (metaTab ? metaRows(pages, metaTab.check.field) : []), [pages, metaTab]);
+  // duplicates are only analysed on their tab and here; they never rank Alta, so the badge stays right
+  const issues = useMemo((): Issue[] => {
+    const reports: Reports = {
+      codes: { rows: pages, filters: CODE_FILTERS },
+      index: { rows: pages, filters: indexTabFilters },
+      broken: { rows: broken, filters: BROKEN_FILTERS },
+      images: { rows: images, filters: IMAGE_FILTERS },
+      sitemap: { rows: pages, filters: SITEMAP_FILTERS },
+      perf: { rows: pages, filters: PERF_FILTERS },
+      hreflang: { rows: hreflangRows, filters: HREFLANG_FILTERS },
+      schema: { rows: schemaRows, filters: schemaTabFilters },
+      duplicates: { rows: dupRows, filters: DUP_FILTERS },
+      ...Object.fromEntries(metaTabs.map((m) => [m.check.field, { rows: metaRows(pages, m.check.field), filters: m.filters }])),
+    };
+    return countIssues(ISSUES, reports);
+  }, [pages, indexTabFilters, broken, images, hreflangRows, schemaRows, schemaTabFilters, dupRows]);
+  const highIssues = issues.filter((i) => i.priority === "Alta").length;
   const host = pages[0] ? new URL(pages[0].url).hostname : "crawl";
+  const statusText = running
+    ? `${STAGE_LABEL[progress?.stage ?? "pages"]}: ${(progress?.done ?? 0).toLocaleString("it-IT")}` +
+      (progress && progress.pending > 0 ? ` · ${progress.pending.toLocaleString("it-IT")} in coda` : "")
+    : pages.length > 0
+      ? `${pages.length.toLocaleString("it-IT")} URL · ${host}` +
+        (elapsed !== null ? ` · ${stopped ? "interrotto dopo" : "completato in"} ${fmt.format(elapsed)} s` : "")
+      : "Pronto";
   /** Row selection for tables whose rows carry a crawled `url`: opens the detail panel. */
   const selectByUrl = {
     onRowClick: (r: { url: string }) => setSelected(r.url),
@@ -416,7 +477,10 @@ export default function App() {
       <header className="toolbar">
         <div className="brand">
           <span className="logo" aria-hidden />
-          CyberFrog
+          <span className="brand-text">
+            CyberFrog
+            <small>Another SEO Tool</small>
+          </span>
         </div>
         <form onSubmit={start}>
           <label htmlFor="start-url" className="visually-hidden">
@@ -431,9 +495,13 @@ export default function App() {
             placeholder="https://esempio.it"
             disabled={running}
           />
-          <button type="submit" disabled={running}>
-            {running ? "Scansione…" : "Avvia"}
-          </button>
+          {running ? (
+            <button type="button" className="stop" onClick={stopCrawl} disabled={stopped}>
+              {stopped ? "Interruzione…" : "Stop"}
+            </button>
+          ) : (
+            <button type="submit">Avvia</button>
+          )}
         </form>
         <div className="file-actions">
           <button type="button" className="ghost" onClick={() => setSettingsOpen(true)} disabled={running}>
@@ -522,17 +590,35 @@ export default function App() {
 
           <nav className="tabs" role="tablist" aria-label="Report">
             {TABS.map((t) => (
-              <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+              <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => {
+                  setTab(t.id);
+                  setJump((j) => ({ tab: null, filter: null, seq: j.seq + 1 }));
+                }}
+              >
                 {t.label}
                 {t.id === "broken" && broken.length > 0 && <span className="count">{broken.length}</span>}
+                {t.id === "issues" && highIssues > 0 && <span className="count">{highIssues}</span>}
               </button>
             ))}
           </nav>
 
           <div className="workspace">
+            {tab === "issues" && (
+              <DataTable
+                key="issues"
+                data={issues}
+                columns={issueColumns}
+                exportName={`${host}-problemi`}
+                onRowClick={(i) => {
+                  setTab(i.tab as Tab);
+                  setJump((j) => ({ tab: i.tab, filter: i.filter, seq: j.seq + 1 }));
+                }}
+              />
+            )}
             {tab === "internal" && (
               <DataTable
-                key="internal"
+                key={`internal-${jump.seq}`}
+                initialFilter={jump.tab === "internal" ? jump.filter ?? undefined : undefined}
                 data={pages}
                 columns={internalColumns}
                 exportName={`${host}-interni`}
@@ -541,7 +627,8 @@ export default function App() {
             )}
             {tab === "codes" && (
               <DataTable
-                key="codes"
+                key={`codes-${jump.seq}`}
+                initialFilter={jump.tab === "codes" ? jump.filter ?? undefined : undefined}
                 data={pages}
                 columns={codeColumns}
                 filters={CODE_FILTERS}
@@ -551,7 +638,8 @@ export default function App() {
             )}
             {tab === "index" && (
               <DataTable
-                key="index"
+                key={`index-${jump.seq}`}
+                initialFilter={jump.tab === "index" ? jump.filter ?? undefined : undefined}
                 data={pages}
                 columns={indexColumns}
                 filters={indexTabFilters}
@@ -561,7 +649,8 @@ export default function App() {
             )}
             {tab === "external" && (
               <DataTable
-                key="external"
+                key={`external-${jump.seq}`}
+                initialFilter={jump.tab === "external" ? jump.filter ?? undefined : undefined}
                 data={external}
                 columns={externalColumns}
                 filters={EXTERNAL_FILTERS}
@@ -570,7 +659,8 @@ export default function App() {
             )}
             {tab === "broken" && (
               <DataTable
-                key="broken"
+                key={`broken-${jump.seq}`}
+                initialFilter={jump.tab === "broken" ? jump.filter ?? undefined : undefined}
                 data={broken}
                 columns={brokenColumns}
                 filters={BROKEN_FILTERS}
@@ -581,7 +671,8 @@ export default function App() {
             )}
             {metaTab && (
               <DataTable
-                key={tab}
+                key={`${tab}-${jump.seq}`}
+                initialFilter={jump.tab === tab ? jump.filter ?? undefined : undefined}
                 data={rows}
                 columns={metaTab.columns}
                 filters={metaTab.filters}
@@ -591,7 +682,8 @@ export default function App() {
             )}
             {tab === "sitemap" && (
               <DataTable
-                key="sitemap"
+                key={`sitemap-${jump.seq}`}
+                initialFilter={jump.tab === "sitemap" ? jump.filter ?? undefined : undefined}
                 data={pages}
                 columns={sitemapColumns}
                 filters={SITEMAP_FILTERS}
@@ -606,7 +698,8 @@ export default function App() {
             )}
             {tab === "duplicates" && (
               <DataTable
-                key="duplicates"
+                key={`duplicates-${jump.seq}`}
+                initialFilter={jump.tab === "duplicates" ? jump.filter ?? undefined : undefined}
                 data={dupRows}
                 columns={dupColumns}
                 filters={DUP_FILTERS}
@@ -616,7 +709,8 @@ export default function App() {
             )}
             {tab === "schema" && (
               <DataTable
-                key="schema"
+                key={`schema-${jump.seq}`}
+                initialFilter={jump.tab === "schema" ? jump.filter ?? undefined : undefined}
                 data={schemaRows}
                 columns={schemaColumns}
                 filters={schemaTabFilters}
@@ -626,7 +720,8 @@ export default function App() {
             )}
             {tab === "hreflang" && (
               <DataTable
-                key="hreflang"
+                key={`hreflang-${jump.seq}`}
+                initialFilter={jump.tab === "hreflang" ? jump.filter ?? undefined : undefined}
                 data={hreflangRows}
                 columns={hreflangColumns}
                 filters={HREFLANG_FILTERS}
@@ -636,7 +731,8 @@ export default function App() {
             )}
             {tab === "perf" && (
               <DataTable
-                key="perf"
+                key={`perf-${jump.seq}`}
+                initialFilter={jump.tab === "perf" ? jump.filter ?? undefined : undefined}
                 data={pages}
                 columns={perfColumns}
                 filters={PERF_FILTERS}
@@ -646,7 +742,8 @@ export default function App() {
             )}
             {tab === "images" && (
               <DataTable
-                key="images"
+                key={`images-${jump.seq}`}
+                initialFilter={jump.tab === "images" ? jump.filter ?? undefined : undefined}
                 data={images}
                 columns={imageColumns}
                 filters={IMAGE_FILTERS}
@@ -677,6 +774,14 @@ export default function App() {
           </div>
         </>
       )}
+      <footer className="statusbar">
+        <span role="status">{statusText}</span>
+        <button type="button" className="powered" onClick={() => openUrl("https://cyberzec.it")}>
+          Powered by
+          <img src={cyberzecShield} alt="" width={18} height={18} />
+          <strong>Daniele Zecca – CyberZec</strong>
+        </button>
+      </footer>
     </main>
   );
 }

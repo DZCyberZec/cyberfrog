@@ -39,6 +39,8 @@ type Props<T extends RowData> = {
   isSelected?: (row: T) => boolean;
   /** Extra buttons shown next to the CSV export. */
   actions?: ReactNode;
+  /** Filter selected when the table mounts; defaults to the first one. */
+  initialFilter?: string;
 };
 
 /** Filter chips, CSV export and a sortable, virtualized table. Give it a `key` per report. */
@@ -50,8 +52,9 @@ export function DataTable<T extends RowData>({
   onRowClick,
   isSelected,
   actions,
+  initialFilter,
 }: Props<T>) {
-  const [filterId, setFilterId] = useState(filters?.[0]?.id);
+  const [filterId, setFilterId] = useState(initialFilter ?? filters?.[0]?.id);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
   const active = filters?.find((f) => f.id === filterId);
   const shown = useMemo(() => (active ? data.filter(active.test) : data), [data, active]);

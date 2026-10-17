@@ -2,6 +2,8 @@ pub mod crawler;
 pub mod report;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use regex::Regex;
@@ -103,6 +105,16 @@ fn load(path: &Path) -> Result<CrawlData, String> {
     })
 }
 
+/// Stop signal of the crawl currently running, shared with `stop_crawl`.
+#[derive(Default)]
+struct CrawlStop(Arc<AtomicBool>);
+
+/// Ends the running crawl; `start_crawl` then returns what was stored so far.
+#[tauri::command]
+fn stop_crawl(stop: tauri::State<CrawlStop>) {
+    stop.0.store(true, Ordering::Relaxed);
+}
+
 /// Crawls `url` into a new SQLite file under the app data dir, streaming progress, and returns every page.
 #[tauri::command]
 async fn start_crawl(
@@ -110,6 +122,7 @@ async fn start_crawl(
     url: String,
     settings: Settings,
     on_progress: Channel<Progress>,
+    stop: tauri::State<'_, CrawlStop>,
 ) -> Result<CrawlData, String> {
     let start = Url::parse(url.trim()).map_err(|e| format!("URL non valido: {e}"))?;
     if !matches!(start.scheme(), "http" | "https") {
@@ -121,7 +134,11 @@ async fn start_crawl(
         .as_millis();
     let db_path = crawls_dir(&app)?.join(format!("crawl-{stamp}.sqlite"));
 
-    let cfg = config(start, settings)?;
+    stop.0.store(false, Ordering::Relaxed);
+    let cfg = Config {
+        stop: stop.0.clone(),
+        ..config(start, settings)?
+    };
     crawler::crawl(cfg, &db_path, |p| {
         let _ = on_progress.send(p); // a closed window just stops listening
     })
@@ -191,10 +208,12 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(CrawlStop::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             start_crawl,
+            stop_crawl,
             open_crawl,
             page_links,
             image_pages,

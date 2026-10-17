@@ -3,7 +3,8 @@
 use std::collections::{HashSet, VecDeque};
 use std::error::Error;
 use std::path::Path;
-use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
 use regex::Regex;
@@ -47,6 +48,8 @@ pub struct Config {
     pub respect_robots: bool,
     /// Discovered URLs matching any of these are skipped (the start URL never is).
     pub exclude: Vec<Regex>,
+    /// Set from elsewhere to end the crawl early; what was stored so far stays readable.
+    pub stop: Arc<AtomicBool>,
 }
 
 impl Config {
@@ -62,6 +65,7 @@ impl Config {
             user_agent: USER_AGENT.to_owned(),
             respect_robots: true,
             exclude: Vec::new(),
+            stop: Arc::default(),
         }
     }
 }
@@ -405,6 +409,9 @@ pub async fn crawl(
     let mut written = 0;
 
     loop {
+        if cfg.stop.load(Ordering::Relaxed) {
+            return Ok(written); // dropping the JoinSet aborts requests still in flight
+        }
         while tasks.len() < concurrency
             && let Some((url, depth)) = queue.pop_front()
         {
@@ -551,25 +558,11 @@ pub async fn crawl(
             pending: queue.len() + tasks.len(),
         });
     }
-    if cfg.check_external {
-        check_external(
-            &client,
-            &mut db,
-            concurrency,
-            cfg.max_urls,
-            &mut on_progress,
-        )
-        .await?;
+    if cfg.check_external && !cfg.stop.load(Ordering::Relaxed) {
+        check_external(&client, &mut db, &cfg, &mut on_progress).await?;
     }
-    if cfg.check_images {
-        check_images(
-            &client,
-            &mut db,
-            concurrency,
-            cfg.max_urls,
-            &mut on_progress,
-        )
-        .await?;
+    if cfg.check_images && !cfg.stop.load(Ordering::Relaxed) {
+        check_images(&client, &mut db, &cfg, &mut on_progress).await?;
     }
     Ok(written)
 }
@@ -577,7 +570,7 @@ pub async fn crawl(
 /// Runs `check` on every URL with bounded concurrency, storing each result as it arrives.
 async fn check_all<T, Fut>(
     urls: Vec<String>,
-    concurrency: usize,
+    cfg: &Config,
     stage: Stage,
     on_progress: &mut (impl FnMut(Progress) + Send),
     check: impl Fn(String) -> Fut,
@@ -591,7 +584,11 @@ where
     let mut queue = urls.into_iter();
     let mut tasks = JoinSet::new();
     let mut done = 0;
+    let concurrency = cfg.concurrency.max(1);
     loop {
+        if cfg.stop.load(Ordering::Relaxed) {
+            return Ok(());
+        }
         while tasks.len() < concurrency
             && let Some(url) = queue.next()
         {
@@ -621,18 +618,17 @@ fn distinct(db: &Connection, sql: &str, max: usize) -> rusqlite::Result<Vec<Stri
 async fn check_external(
     client: &Client,
     db: &mut Connection,
-    concurrency: usize,
-    max: usize,
+    cfg: &Config,
     on_progress: &mut (impl FnMut(Progress) + Send),
 ) -> CrawlResult<()> {
     let urls = distinct(
         db,
         "SELECT DISTINCT target FROM links WHERE external = 1 ORDER BY target LIMIT ?1",
-        max,
+        cfg.max_urls,
     )?;
     check_all(
         urls,
-        concurrency,
+        cfg,
         Stage::External,
         on_progress,
         |url| status_of(client.clone(), url),
@@ -651,18 +647,17 @@ async fn check_external(
 async fn check_images(
     client: &Client,
     db: &mut Connection,
-    concurrency: usize,
-    max: usize,
+    cfg: &Config,
     on_progress: &mut (impl FnMut(Progress) + Send),
 ) -> CrawlResult<()> {
     let urls = distinct(
         db,
         "SELECT DISTINCT src FROM images ORDER BY src LIMIT ?1",
-        max,
+        cfg.max_urls,
     )?;
     check_all(
         urls,
-        concurrency,
+        cfg,
         Stage::Images,
         on_progress,
         |url| image_info(client.clone(), url),
@@ -1952,6 +1947,40 @@ mod tests {
             "bingbot"
         );
         assert_eq!(robots_token("MyCrawler"), "MyCrawler");
+    }
+
+    #[tokio::test]
+    async fn stop_flag_ends_the_crawl_early_keeping_what_was_stored() {
+        let base = serve().await;
+        let path = db_path("stop");
+        let stop = Arc::new(AtomicBool::new(false));
+        let cfg = Config {
+            concurrency: 1,
+            check_external: true,
+            check_images: true,
+            use_sitemaps: false,
+            stop: stop.clone(),
+            ..Config::new(base)
+        };
+        let mut stages = Vec::new();
+        let written = crawl(cfg, &path, |p| {
+            stages.push(p.stage);
+            if p.done == 2 {
+                stop.store(true, Ordering::Relaxed); // what the Stop button does
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(written, 2);
+        assert_eq!(
+            read_pages(&path).unwrap().len(),
+            2,
+            "stored pages remain readable"
+        );
+        assert!(
+            stages.iter().all(|s| *s == Stage::Pages),
+            "later checks are skipped"
+        );
     }
 
     #[tokio::test]

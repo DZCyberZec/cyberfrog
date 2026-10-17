@@ -53,6 +53,8 @@ docs/clean-room-map.md     funzionalità di riferimento
 8. **Hreflang:** codice non valido, senza return link, alternative non 200, senza auto-riferimento, senza x-default.
 9. **Dati strutturati:** JSON-LD (anche `@graph`) e microdata; JSON non valido; proprietà richieste da Google mancanti per alcuni tipi.
 10. **Contenuti duplicati:** `content_hash` (FNV-1a) e SimHash a 64 bit del testo principale (senza nav e footer). Tab Duplicati con duplicati esatti, quasi duplicati (≥ 90%, al massimo 6 bit diversi) e contenuto scarso (< 200 parole), solo su pagine indicizzabili. Confronto di tutte le coppie in TS: va bene fino a ~10k pagine.
+11. **Branding e controllo:** sottotitolo "Another SEO Tool", barra di stato sempre visibile con "Powered by Daniele Zecca – CyberZec" (scudo CyberZec in `src/assets/`, apre cyberzec.it), pulsante **Stop** (flag condiviso `CrawlStop`, i dati raccolti restano).
+12. **Tab Problemi** (predefinito): elenco di tutti i problemi con priorità Alta/Media/Bassa, numero di URL e cosa fare. Clic → apre il report con il filtro già selezionato (`ISSUES` in `src/pages.ts`). Title/meta/H1 e canonical mancante sono valutati solo sulle pagine indicizzabili.
 
 ## Roadmap
 
@@ -62,6 +64,10 @@ docs/clean-room-map.md     funzionalità di riferimento
 - integrazioni Google Search Console / PageSpeed Insights (richiedono credenziali: chiedere all'utente)
 - confronto tra due crawl
 - visualizzazione della struttura del sito
+
+**Decisioni già prese dall'utente:** licenza Apache-2.0, repo GitHub **pubblico**, nome "CyberFrog – Another SEO Tool". Icona dell'app: rana verde neon con circuiti, fornita in chat. Va salvata come `icon.png` nella cartella del progetto, poi `npx tauri icon icon.png` e usata anche come logo nell'header. Ordine concordato: icona → inglese + README → GitHub (chiedere conferma prima del push; `gh` non è installato).
+
+**Migliorie note:** 15 tab sono troppi (barra orizzontale con scroll): raggrupparli in una barra laterale come Screaming Frog. Rendering JavaScript.
 
 **Rifinitura e pubblicazione** (l'utente ha chiesto di farla dopo aver finito l'app):
 1. Logo/icona dell'app: chiedere all'utente la direzione grafica, poi `npx tauri icon <png 1024>`.

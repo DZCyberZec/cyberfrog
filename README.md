@@ -31,7 +31,10 @@
 - **Custom extraction and search**: pull any value from every page with a CSS selector (text or attribute) or a regex — authors, prices, GA4 IDs — or check which pages contain or lack a piece of text or code.
 - **Redirect chains**: every redirect followed to its final URL, with chains, loops and non-200 destinations.
 - **Uncrawlable links**: links search engines may not follow (JavaScript navigation, `href` outside `<a>`) and invalid URLs.
-- **AI assistants**: a built-in MCP server lets Claude and other assistants run crawls and query the data.
+- **Link Score and site structure**: internal PageRank on a 0–100 scale for every URL, URLs per click depth, and the folder tree with URL counts, indexable pages and the strongest Link Score in each folder.
+- **JavaScript rendering** (optional): pages are also opened in a headless Chrome, Chromium, Brave or Edge already on your Mac. The JavaScript report shows content and links that exist only after rendering, and pages that failed to render.
+- **AI assistant**: with your own Anthropic API key, Claude suggests titles and meta descriptions, explains a page's issues and writes a prioritised action plan for the whole crawl. The key stays in the macOS Keychain; page data is sent to Anthropic only when you ask.
+- **MCP server**: Claude and other assistants can run crawls and query the data (see below).
 - **Export and reuse**: CSV export of any view (Excel-friendly), crawls saved as single SQLite files you can save, reopen and query.
 - **English and Italian** interface.
 
@@ -81,7 +84,7 @@ claude mcp add cyberfrog -- /Applications/CyberFrog.app/Contents/MacOS/cyberfrog
 
 | Tool | What it does |
 |---|---|
-| `crawl_site` | Crawls a site (default limit 500 URLs) and returns an SEO summary; optional custom extraction/search rules |
+| `crawl_site` | Crawls a site (default limit 500 URLs) and returns an SEO summary; optional custom extraction/search rules and JavaScript rendering (`render_js`) |
 | `list_crawls` | Lists saved crawls, newest first |
 | `crawl_summary` | Status codes, indexability, title/meta/H1 problems, broken links, slow pages, images |
 | `query_crawl` | Runs a read-only SQL `SELECT` on a crawl (up to 200 rows) |
@@ -118,7 +121,8 @@ node scripts/pages.check.ts    # filters, issues and exports
 | Part | Technology |
 |---|---|
 | Desktop shell | [Tauri 2](https://tauri.app) |
-| Crawler | Rust: tokio, reqwest, scraper, texting_robots |
+| Crawler | Rust: tokio, reqwest, scraper, texting_robots; optional headless Chromium for JavaScript |
+| AI assistant | Claude Messages API, key in the macOS Keychain |
 | Storage | one SQLite file per crawl |
 | Interface | React + TypeScript, TanStack Table and Virtual |
 

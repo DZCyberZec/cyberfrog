@@ -2,7 +2,7 @@
 
 Documento per riprendere il lavoro in una nuova chat. Incollalo (o chiedi di leggere `docs/HANDOFF.md`) all'inizio.
 
-Ultimo aggiornamento: 2026-10-17.
+Ultimo aggiornamento: 2026-10-17 (v0.4.0).
 
 ## Cos'è
 
@@ -26,11 +26,15 @@ CyberFrog è un crawler SEO desktop: una ricostruzione **clean-room** di Screami
 ```
 src-tauri/src/crawler.rs   crawl BFS, parsing HTML, schema SQLite, verifiche link esterni/immagini, sitemap, test
 src-tauri/src/report.rs    letture in sola lettura: link esterni, link rotti, link di una pagina, immagini, hreflang, dati strutturati
-src-tauri/src/lib.rs       comandi Tauri (start_crawl, open_crawl, page_links, image_pages, save_crawl_as, list_crawls, write_text_file), Settings
+src-tauri/src/lib.rs       comandi Tauri (start_crawl, open_crawl, page_links, image_pages, save_crawl_as, list_crawls, find_browser, ai_has_key, ai_set_key, ai_complete, write_text_file), Settings
+src-tauri/src/ai.rs        assistente AI: chiave nel Portachiavi (`security -i` via stdin), chiamata alla Messages API (claude-opus-5-5, fallbacks "default")
+src-tauri/src/mcp.rs       server MCP (`cyberfrog --mcp`)
 src-tauri/examples/crawl.rs  crawl da terminale senza UI
 src/App.tsx                shell, tab, riepilogo, apertura/salvataggio
 src/DataTable.tsx          tabella generica: filtri, export CSV, ordinamento, virtualizzazione, selezione riga
-src/DetailPanel.tsx        pannello Inlink/Outlink di un URL
+src/DetailPanel.tsx        pannello Inlink/Outlink/Assistente AI di un URL
+src/SiteStructure.tsx      URL per profondità + albero delle cartelle
+src/ai.ts, src/AiAssist.tsx  prompt per Claude, hook useAi e output con Copia
 src/ImagePanel.tsx         pagine che usano un'immagine
 src/SettingsDialog.tsx     finestra Impostazioni
 src/pages.ts               tipi (rispecchiano le struct Rust), filtri, controlli SEO, CSV, sitemap XML
@@ -56,22 +60,23 @@ docs/clean-room-map.md     funzionalità di riferimento
 11. **Branding e controllo:** sottotitolo "Another SEO Tool", barra di stato sempre visibile con "Powered by Daniele Zecca – CyberZec" (scudo CyberZec in `src/assets/`, apre cyberzec.it), pulsante **Stop** (flag condiviso `CrawlStop`, i dati raccolti restano).
 13. **v0.2.0 (ispirata a Screaming Frog 24, da note pubbliche):** link non scansionabili e URL non validi (tab + 2 problemi); confronto tra crawl (tab Confronto, automatico col crawl precedente dello stesso host, menu per cambiarlo; `compareCrawls`/`allIssues` in `src/pages.ts`); server MCP integrato `cyberfrog --mcp` (`src-tauri/src/mcp.rs`: crawl_site, list_crawls, crawl_summary, query_crawl in sola lettura, page_details).
 14. **v0.3.0:** estrazione personalizzata e ricerca nel sorgente (regole CSS/regex/search in Impostazioni e in `crawl_site` MCP, tab Personalizzati, tabelle `custom_rules`/`custom`), report catene di redirect (`redirectChains`), barra laterale a gruppi al posto dei tab, header e barra di stato fissi. Dalla v0.3 i messaggi di commit sono in inglese.
+15. **v0.4.0:** Link Score (PageRank interno 0–100, `report::link_scores`), vista Struttura (profondità + albero cartelle), rendering JavaScript opzionale (`Renderer` in crawler.rs: Chrome/Chromium/Brave/Edge headless `--dump-dom`, max 4 insieme, profilo temporaneo, timeout 30 s; colonne `rendered`, `raw_word_count`, `raw_links`, `render_error`; report JavaScript), assistente AI con la chiave Anthropic dell'utente (title/meta, spiegazione problemi, piano d'azione).
 12. **Tab Problemi** (predefinito): elenco di tutti i problemi con priorità Alta/Media/Bassa, numero di URL e cosa fare. Clic → apre il report con il filtro già selezionato (`ISSUES` in `src/pages.ts`). Title/meta/H1 e canonical mancante sono valutati solo sulle pagine indicizzabili.
 
 ## Roadmap
 
 **Prossime funzioni SEO (candidate):**
 - header di sicurezza (HSTS, CSP, X-Frame-Options), contenuto misto
-- rendering JavaScript (Chromium headless)
 - integrazioni Google Search Console / PageSpeed Insights (richiedono credenziali: chiedere all'utente)
-- confronto tra due crawl
-- visualizzazione della struttura del sito
+- grafo visuale dei link interni (force-directed)
+- crawl pianificati e report programmati
+- assistente AI: provarlo con una chiave vera (in sviluppo testato solo con un mock dell'API)
 
 **Pubblicato (2026-10-17):** repo pubblico https://github.com/DZCyberZec/cyberfrog (Apache-2.0), release [v0.1.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.1.0) con il DMG per Apple silicon. Commit con l'indirizzo noreply di GitHub (`git config user.email` locale già impostato): non usare l'email personale. Fatti anche icona (rana disegnata in `branding/cyberfrog-icon.svg`), interfaccia IT/EN (`src/i18n.ts`: aggiungi ogni testo nuovo al dizionario `EN`, il self-check lo verifica), README in inglese con screenshot in `docs/screenshots/`.
 
 **Per una nuova versione:** alza la versione in `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`, poi `npx tauri build`, poi `gh release create vX.Y.Z src-tauri/target/release/bundle/dmg/*.dmg`.
 
-**Migliorie note:** 15 tab sono troppi (barra orizzontale con scroll): raggrupparli in una barra laterale come Screaming Frog. Rendering JavaScript.
+**Note:** l'assistente AI non è stato provato con una chiave reale (nessuna sul Mac di sviluppo): richieste e errori sono coperti da test contro un server locale. cyberzec.it è renderizzato lato server: con il rendering JS non cambia nulla, come atteso.
 
 **Rifinitura e pubblicazione** (fatte, vedi sopra; resta da fare):
 1. Logo/icona dell'app: chiedere all'utente la direzione grafica, poi `npx tauri icon <png 1024>`.

@@ -57,8 +57,8 @@ export function SettingsDialog({ open, settings, onSave, onClose, hasAiKey, onAi
               min={1}
               max={100000}
               required
-              value={draft.max_urls}
-              onChange={(e) => set("max_urls", e.currentTarget.valueAsNumber || 1)}
+              value={Number.isNaN(draft.max_urls) ? "" : draft.max_urls}
+              onChange={(e) => set("max_urls", e.currentTarget.valueAsNumber)}
             />
           </label>
           <label>
@@ -68,8 +68,8 @@ export function SettingsDialog({ open, settings, onSave, onClose, hasAiKey, onAi
               min={1}
               max={32}
               required
-              value={draft.concurrency}
-              onChange={(e) => set("concurrency", e.currentTarget.valueAsNumber || 1)}
+              value={Number.isNaN(draft.concurrency) ? "" : draft.concurrency}
+              onChange={(e) => set("concurrency", e.currentTarget.valueAsNumber)}
             />
             <small>{tr("Più alto è più veloce ma pesa di più sul server. 8 va bene per quasi tutti i siti.")}</small>
           </label>

@@ -436,6 +436,8 @@ type CrawlData = {
   bad_links: BadLinkRow[];
   custom: CustomData;
 };
+/** Crawls listed on the start screen; older ones stay reachable with Apri… */
+const RECENT_SHOWN = 5;
 type CrawlSummary = { path: string; start_url: string | null; pages: number; modified_ms: number };
 type Progress = { stage: "pages" | "external" | "images"; done: number; pending: number };
 const STAGE_LABEL: Record<Progress["stage"], string> = {
@@ -551,8 +553,12 @@ export default function App() {
     onProgress.onmessage = setProgress;
     const t0 = performance.now();
     try {
-      show(await invoke<CrawlData>("start_crawl", { url, settings, onProgress }));
+      const data = await invoke<CrawlData>("start_crawl", { url, settings, onProgress });
+      show(data);
       setElapsed((performance.now() - t0) / 1000);
+      // a low limit saved by mistake looks like a broken crawl, so say why it stopped
+      if (data.pages.length >= settings.max_urls)
+        setNotice(tr("Crawl fermato al limite di {n} URL impostato: puoi alzarlo in Impostazioni.", { n: settings.max_urls.toLocaleString(LOCALE) }));
       refreshRecent();
     } catch (err) {
       setError(trError(String(err)));
@@ -775,7 +781,7 @@ export default function App() {
             <div className="recent">
               <h2>{tr("Crawl recenti")}</h2>
               <ul>
-                {recent.map((c) => (
+                {recent.slice(0, RECENT_SHOWN).map((c) => (
                   <li key={c.path}>
                     <button type="button" onClick={() => openCrawl(c.path)}>
                       <span className="recent-url">{c.start_url ?? tr("Crawl vuoto")}</span>

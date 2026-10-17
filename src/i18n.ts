@@ -215,6 +215,7 @@ const EN: Record<string, string> = {
   "Risposta oltre 1 s": "Response over 1 s",
   "Risposta oltre 3 s": "Response over 3 s",
   "HTML oltre 512 KB": "HTML over 512 KB",
+  "Crawl fermato al limite di {n} URL impostato: puoi alzarlo in Impostazioni.": "Crawl stopped at the {n}-URL limit you set: you can raise it in Settings.",
   // AI assistant
   "Claude sta scrivendo…": "Claude is writing…",
   "Aggiungi la tua chiave API Anthropic in Impostazioni per usare l'assistente AI.": "Add your Anthropic API key in Settings to use the AI assistant.",

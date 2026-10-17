@@ -33,7 +33,9 @@
 - **Uncrawlable links**: links search engines may not follow (JavaScript navigation, `href` outside `<a>`) and invalid URLs.
 - **Link Score and site structure**: internal PageRank on a 0–100 scale for every URL, URLs per click depth, and the folder tree with URL counts, indexable pages and the strongest Link Score in each folder.
 - **JavaScript rendering** (optional): pages are also opened in a headless Chrome, Chromium, Brave or Edge already on your Mac. The JavaScript report shows content and links that exist only after rendering, and pages that failed to render.
-- **AI assistant**: with your own Anthropic API key, Claude suggests titles and meta descriptions, explains a page's issues and writes a prioritised action plan for the whole crawl. The key stays in the macOS Keychain; page data is sent to Anthropic only when you ask.
+- **AI assistant**: Claude suggests titles and meta descriptions, explains a page's issues and writes a prioritised action plan for the whole crawl. It runs through your own [Claude Code](https://claude.com/code) (your Claude subscription, no API cost) or an Anthropic API key kept in the macOS Keychain. Page data is sent to Anthropic only when you ask.
+- **List mode**: paste a list of URLs (a migration plan, a spreadsheet column) and CyberFrog checks only those, on any site, plus where they redirect.
+- **Scheduled crawls**: every day or every week at a set time, even with the app closed. A macOS notification tells you what changed since the previous run (new and removed pages, status changes, new errors).
 - **MCP server**: Claude and other assistants can run crawls and query the data (see below).
 - **Export and reuse**: CSV export of any view (Excel-friendly), crawls saved as single SQLite files you can save, reopen and query.
 - **English and Italian** interface.
@@ -84,7 +86,7 @@ claude mcp add cyberfrog -- /Applications/CyberFrog.app/Contents/MacOS/cyberfrog
 
 | Tool | What it does |
 |---|---|
-| `crawl_site` | Crawls a site (default limit 500 URLs) and returns an SEO summary; optional custom extraction/search rules and JavaScript rendering (`render_js`) |
+| `crawl_site` | Crawls a site (default limit 500 URLs) and returns an SEO summary; optional custom extraction/search rules, JavaScript rendering (`render_js`) and list mode (`urls`) |
 | `list_crawls` | Lists saved crawls, newest first |
 | `crawl_summary` | Status codes, indexability, title/meta/H1 problems, broken links, slow pages, images |
 | `query_crawl` | Runs a read-only SQL `SELECT` on a crawl (up to 200 rows) |
@@ -122,7 +124,8 @@ node scripts/pages.check.ts    # filters, issues and exports
 |---|---|
 | Desktop shell | [Tauri 2](https://tauri.app) |
 | Crawler | Rust: tokio, reqwest, scraper, texting_robots; optional headless Chromium for JavaScript |
-| AI assistant | Claude Messages API, key in the macOS Keychain |
+| AI assistant | Claude Code CLI (`claude -p`, no tools) or the Claude Messages API with a key in the macOS Keychain |
+| Scheduled crawls | launchd agents running `cyberfrog --scheduled <id>` |
 | Storage | one SQLite file per crawl |
 | Interface | React + TypeScript, TanStack Table and Virtual |
 

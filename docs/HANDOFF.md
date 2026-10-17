@@ -46,9 +46,9 @@ docs/clean-room-map.md     funzionalità di riferimento
 
 **Compatibilità:** i crawl salvati con versioni precedenti restano apribili. Per le colonne nuove `read_pages` usa `newer(...)` e `report.rs` usa `compiles(...)`. Ogni colonna nuova deve seguire questo schema.
 
-## Dove siamo (v0.4.0, 2026-10-17)
+## Dove siamo (v0.5.0, 2026-10-17)
 
-App pubblicata: https://github.com/DZCyberZec/cyberfrog (Apache-2.0), ultima release [v0.4.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.4.0) con DMG per Apple silicon. Installata in `/Applications/CyberFrog.app`. 23 test Rust + `scripts/pages.check.ts`, clippy pulito.
+App pubblicata: https://github.com/DZCyberZec/cyberfrog (Apache-2.0), ultima release [v0.5.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.5.0) con DMG per Apple silicon. Installata in `/Applications/CyberFrog.app`. 31 test Rust + `scripts/pages.check.ts`, clippy pulito.
 
 ### Fatto
 
@@ -57,34 +57,40 @@ App pubblicata: https://github.com/DZCyberZec/cyberfrog (Apache-2.0), ultima rel
 | 0.1.0 | Crawl stesso host (robots.txt, redirect, concorrenza, Stop), SQLite per crawl, Interni / Codici di risposta / Title / Meta description / H1 con filtri, indicizzabilità (noindex, canonical, X-Robots-Tag), link esterni e rotti, pannello Inlink/Outlink, immagini (alt, dimensioni, peso), sitemap XML (lettura, orfane, generazione), impostazioni (limite, velocità, user agent, esclusioni), prestazioni, hreflang, dati strutturati, contenuti duplicati (hash + SimHash), tab Problemi con priorità, export CSV, interfaccia IT/EN, icona, branding "Powered by Daniele Zecca – CyberZec" |
 | 0.2.0 | Link non scansionabili, confronto tra crawl (automatico col precedente), server MCP `cyberfrog --mcp` |
 | 0.3.0 | Estrazione personalizzata e ricerca nel sorgente (CSS / regex / testo), catene di redirect, barra laterale a gruppi |
+| 0.5.0 | Modalità lista (solo gli URL incollati, qualsiasi dominio, robots.txt per dominio), crawl pianificati (launchd + `cyberfrog --scheduled <id>`, notifica con le differenze dal giro precedente), assistente AI anche tramite Claude Code (abbonamento, nessun costo API), modulo `ai/` diviso in keychain/api/claude_code |
 | 0.4.0 | Link Score (PageRank interno 0–100), vista Struttura (profondità + albero cartelle), rendering JavaScript opzionale (Chrome/Chromium/Brave/Edge headless, report JavaScript), assistente AI con Claude (title/meta, spiegazione problemi, piano d'azione; chiave nel Portachiavi), limite URL che non scende più a 1 da solo, home con solo gli ultimi 5 crawl |
 
 Dettagli tecnici utili:
 - Colonne nuove nei crawl: leggerle con `newer(...)` in `read_pages` o `compiles(...)` in `report.rs`, così i crawl vecchi restano apribili.
 - Problemi: `ISSUES` in `src/pages.ts`; `allIssues`, `pageIssues`, `withExamples` usano gli stessi report.
 - Rendering JS: `Renderer` in `crawler.rs` (`--dump-dom`, max 4 browser, profilo temporaneo, timeout 30 s).
-- AI: `src-tauri/src/ai.rs` (modello `claude-opus-5-5`, `fallbacks: "default"`), prompt in `src/ai.ts`.
+- AI: `src-tauri/src/ai/` (`claude_code.rs`: `claude -p --tools ""` senza MCP né sessione, prompt su stdin; `api.rs`: `claude-opus-5-5` con `fallbacks: "default"`; `keychain.rs`), prompt in `src/ai.ts`, impostazioni in `src/AiSettings.tsx`.
+- Pianificazioni: `src-tauri/src/schedule.rs`, file `schedules.json` nella cartella dati dell'app, plist in `~/Library/LaunchAgents/com.cyberzec.cyberfrog.schedule.<id>.plist`.
 
 ### Da verificare
 
-- **Assistente AI con una chiave vera:** testato solo contro un server finto locale (sul Mac non c'è una chiave). Prima prova: Impostazioni → Assistente AI → incolla la chiave → Interni → clic su una pagina → tab "Assistente AI".
+- **Assistente AI dal vivo:** testato solo con risposte finte. Il Claude Code del terminale sul Mac dell'utente non ha il login attivo (sessione OAuth scaduta): serve `claude` e poi `/login` nel Terminale. Poi: Interni → clic su una pagina → tab "Assistente AI".
+- **Pianificazione dal vivo:** il runner `--scheduled` e la registrazione in launchd sono provati a mano; manca un giro completo creato dall'app installata.
 - Rendering JS su un sito che usa davvero JavaScript (React/Vue): cyberzec.it è server-side, quindi lì non cambia nulla.
 
 ## Roadmap (cosa manca)
 
-**Prossime funzioni, in ordine di valore:**
+**Richieste dall'utente (2026-10-17), in quest'ordine:**
+1. Funzioni SEO e **GEO** (ottimizzazione per motori AI) nuove e innovative, con codice veloce e leggero.
+2. **Rifacimento UX**: l'interfaccia sembra complicata e da software vecchio.
+3. **Aggiornamento automatico** da GitHub Releases.
+4. **Sicurezza e modularità:** niente file monolitici. Da dividere: `crawler.rs` (~2700 righe) e `App.tsx` (~1200).
+
+**Altre funzioni candidate:**
 1. **Header di sicurezza e contenuto misto:** HSTS, CSP, X-Frame-Options, risorse http su pagine https. Basso sforzo, solo crawler e report.
 2. **Grafo visuale dei link interni** (force-directed, colorato per Link Score o profondità).
 3. **Google Search Console e PageSpeed Insights:** clic, impressioni e Core Web Vitals per URL. Richiedono le credenziali dell'utente: chiedere prima.
-4. **Crawl pianificati e report automatici** (es. ogni lunedì, con confronto e avviso se compaiono problemi nuovi).
-5. **Assistente AI in blocco:** title/meta suggeriti per tutte le pagine con problemi, esportabili in CSV (Batch API, costo 50% più basso).
-6. **Ortografia e leggibilità** dei testi, **accessibilità** di base (lang, label, contrasto).
-7. **Spider di liste:** scansionare solo un elenco di URL incollato, senza seguire i link.
+4. **Assistente AI in blocco:** title/meta suggeriti per tutte le pagine con problemi, esportabili in CSV (Batch API, costo 50% più basso).
+5. **Ortografia e leggibilità** dei testi, **accessibilità** di base (lang, label, contrasto).
 
 **Distribuzione:**
 - Firma e notarizzazione Apple (serve un account Apple Developer dell'utente, 99 $/anno): oggi macOS chiede "Apri comunque" al primo avvio.
 - Build per Mac Intel e Windows (oggi solo Apple silicon).
-- Aggiornamenti automatici dell'app (plugin updater di Tauri).
 
 **Per una nuova versione:** alza la versione in `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`, `npx tauri build`, chiudi l'app con `pkill -x cyberfrog` (il processo è minuscolo), copia in `/Applications`, poi `gh release create vX.Y.Z src-tauri/target/release/bundle/dmg/*.dmg --notes-file <note in inglese>`.
 
@@ -93,6 +99,7 @@ Dettagli tecnici utili:
 - Commit e note di release **in inglese**, risposte in chat in italiano. Mai force-push senza richiesta esplicita.
 - Lavorare **in autonomia**: sviluppare, testare da soli, fare commit, passare alla funzione successiva senza chiedere "procedo?". Fermarsi solo per decisioni vere (push, servizi a pagamento, credenziali, logo, licenza).
 - Rispondere in **italiano**: prima l'azione, passi numerati e brevi, stato sempre esplicito.
+- **Sicurezza prima di tutto e moduli piccoli** (l'utente lavora in cybersecurity): input non fidati validati ai confini, segreti mai in argv/URL, sottoprocessi senza shell e con timeout, privilegi minimi.
 - Codice minimo e completo (stile "ponytail"): niente astrazioni non richieste. I `shortcut:` nei commenti segnano limiti noti.
 
 ## Comandi

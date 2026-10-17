@@ -21,6 +21,7 @@ import { EMPTY_CRAWL, STAGE_LABEL, hostOf, type CrawlData, type CrawlSummary, ty
 import { useAnalysis } from "./useAnalysis";
 import { TABS, type Tab } from "./nav";
 import { buildSitemapXml, type CrawlSnapshot } from "./pages";
+import { buildLlmsTxt } from "./llms";
 import { LANG, LOCALE, setLang, tr, trError } from "./i18n";
 import "./App.css";
 
@@ -192,6 +193,8 @@ export default function App() {
   }
   const saveSitemap = () =>
     saveAs("sitemap.xml", [{ name: "Sitemap XML", extensions: ["xml"] }], (to) => invoke("write_text_file", { path: to, contents: buildSitemapXml(crawl.pages) }), "Sitemap salvata in {path}");
+  const saveLlms = () =>
+    saveAs("llms.txt", [{ name: "llms.txt", extensions: ["txt"] }], (to) => invoke("write_text_file", { path: to, contents: buildLlmsTxt(crawl) }), "llms.txt salvato in {path}");
   const saveCrawlAs = () => saveAs(`${a.host}.sqlite`, SQLITE_FILTER, (to) => invoke("save_crawl_as", { from: crawl.path, to }), "Crawl salvato in {path}");
   const switchLang = () => setLang(LANG === "it" ? "en" : "it");
   const otherLang = LANG === "it" ? "English" : "Italiano";
@@ -335,6 +338,7 @@ export default function App() {
             aiEngine={settings.ai_engine}
             aiReady={isAiReady(settings.ai_engine, aiStatus)}
             onSaveSitemap={saveSitemap}
+            onSaveLlms={saveLlms}
           />
         </div>
       )}

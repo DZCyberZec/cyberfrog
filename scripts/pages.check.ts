@@ -13,6 +13,7 @@ const { pageIssues, withExamples } = await import("../src/pages.ts");
 const { systemPrompt, metaPrompt, explainPrompt, planPrompt } = await import("../src/ai.ts");
 const { healthScore } = await import("../src/health.ts");
 const { TOPIC_FILTERS, topicFindings, REASON_LABEL } = await import("../src/topics.ts");
+const { buildLlmsTxt } = await import("../src/llms.ts");
 const { EMPTY_GEO, geoFilters, geoRows, botState, CITABILITY, PURPOSE_LABEL } = await import("../src/geo.ts");
 
 const base: Page = {
@@ -389,4 +390,24 @@ const tf = topicFindings({
   suggestions: [{ from: "/x", to: "/w", similarity: 0.4, anchor: "W", reason: "related" }],
 });
 assert.deepEqual(tf, [{ url: "/x", kind: "cannibal" }, { url: "/y", kind: "cannibal" }, { url: "/z", kind: "cannibal" }, { url: "/w", kind: "links" }], "a page in two pairs counts once");
+const lp = (url: string, title: string | null, desc: string | null = null, depth = 1): Page => ({ ...base, url, title, meta_description: desc, depth });
+const llms = buildLlmsTxt({
+  ...snap([
+    lp("https://x.it/", "Acme | Tagline lunga", "Consulenza SEO\ne GEO.", 0),
+    lp("https://x.it/seo", "SEO [guida] (2026)", "Come fare SEO"),
+    lp("https://x.it/seo/audit", "Audit"),
+    lp("https://x.it/contatti", "Contatti"),
+    { ...lp("https://x.it/old", "Old"), status: 404 },
+    { ...lp("https://x.it/hidden", "Hidden"), meta_robots: "noindex" },
+    lp("https://x.it/a b(1)", "Spazi"),
+  ]),
+  path: "", external: [], custom: { rules: [], values: [] }, geo: EMPTY_GEO,
+  topics: { analysed: 3, suggestions: [], cannibal: [], clusters: [{ label: ["seo", "audit"], hub: "https://x.it/seo", pages: ["https://x.it/seo/audit", "https://x.it/old", "https://x.it/hidden"] }] },
+});
+assert.equal(llms, [
+  "# Acme", "", "> Consulenza SEO e GEO.", "",
+  "## Seo audit", "", "- [SEO \\[guida\\] (2026)](https://x.it/seo): Come fare SEO", "- [Audit](https://x.it/seo/audit)", "",
+  "## Altre pagine", "", "- [Acme | Tagline lunga](https://x.it/): Consulenza SEO e GEO.", "- [Contatti](https://x.it/contatti)", "- [Spazi](https://x.it/a%20b%281%29)", "",
+].join("\n"), "hub first, noindex and errors left out, brackets and parentheses escaped");
+assert.ok(hasTranslation("Altre pagine"));
 console.log("pages.check: ok");

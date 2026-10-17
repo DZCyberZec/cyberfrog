@@ -28,12 +28,13 @@ type Props = {
   htmlPages: number;
   initialFilter?: string;
   exportName: string;
+  onGenerateLlms: () => void;
   onRowClick: (r: GeoRow) => void;
   isSelected: (r: GeoRow) => boolean;
 };
 
 /** GEO report: what AI answer engines may read on the whole site, then each page's citability. */
-export function GeoReport({ geo, rows, htmlPages, ...table }: Props) {
+export function GeoReport({ geo, rows, htmlPages, onGenerateLlms, ...table }: Props) {
   const filters = useMemo(() => geoFilters(geo), [geo]);
   const average = rows.length ? Math.round(rows.reduce((s, r) => s + r.score, 0) / rows.length) : null;
   if (geo.bots.length === 0) {
@@ -93,6 +94,9 @@ export function GeoReport({ geo, rows, htmlPages, ...table }: Props) {
             </p>
           )}
           <small className="block">{tr("Facoltativo: Google lo ignora, alcuni assistenti AI lo leggono.")}</small>
+          <button type="button" className="secondary gen-btn" onClick={onGenerateLlms}>
+            {tr("Genera llms.txt")}
+          </button>
         </div>
         <div className="geo-card">
           <h3>Content-Signal</h3>

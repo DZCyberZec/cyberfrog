@@ -490,3 +490,9 @@ dialog.settings button.add-rule { align-self: flex-start; text-align: left; }
 .tree .node-link { padding: 0; font: inherit; color: var(--text); background: none; border: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
 .tree .node-link:hover { color: var(--accent); }
 .tree .node-name { color: var(--muted); }
+
+/* Generators */
+.gen-btn { margin-top: 8px; }
+.faq-schema { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.faq-schema .ai-actions { margin-bottom: 0; }
+.faq-pre { margin: 0; padding-top: 16px; max-height: 320px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }

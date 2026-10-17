@@ -80,6 +80,7 @@ type Props = {
   aiEngine: AiEngine;
   aiReady: boolean;
   onSaveSitemap: () => void;
+  onSaveLlms: () => void;
 };
 
 const when = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short" });
@@ -312,6 +313,7 @@ export function Reports(p: Props) {
           rows={a.geoTable}
           htmlPages={a.htmlPages}
           exportName={name("geo")}
+          onGenerateLlms={p.onSaveLlms}
           {...byUrl}
         />
       )}

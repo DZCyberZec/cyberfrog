@@ -5,6 +5,7 @@ import { codeLabel, kindOf, type IssueDef, type LinkRow, type Page, type PageLin
 import { tr, trError } from "./i18n";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
 import { explainPrompt, metaPrompt } from "./ai";
+import { FaqSchema } from "./FaqSchema";
 import type { AiEngine } from "./settings";
 
 const link = helperFor<LinkRow>();
@@ -81,6 +82,7 @@ export function DetailPanel({ crawlPath, url, page, issues, aiEngine, aiReady, o
       </header>
       {view === "ai" ? (
         <div className="ai-view">
+          <FaqSchema key={url} url={url} />
           {!page ? (
             <p className="empty">{tr("Questo URL non è stato scansionato.")}</p>
           ) : !aiReady ? (

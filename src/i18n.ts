@@ -89,6 +89,10 @@ const EN: Record<string, string> = {
   Bloccati: "Blocked",
   "Link rotti": "Broken links",
   "Lingua": "Language",
+  // sidebar groups
+  Panoramica: "Overview",
+  Contenuti: "Content",
+  Risorse: "Resources",
   // tabs
   Problemi: "Issues",
   Interni: "Internal",

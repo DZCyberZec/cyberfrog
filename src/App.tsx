@@ -343,25 +343,59 @@ type Tab =
   | "schema"
   | "duplicates"
   | Check["field"];
-const TABS: { id: Tab; label: string }[] = [
-  { id: "issues", label: tr("Problemi") },
-  { id: "compare", label: tr("Confronto") },
-  { id: "internal", label: tr("Interni") },
-  { id: "codes", label: tr("Codici di risposta") },
-  { id: "redirects", label: tr("Redirect") },
-  { id: "index", label: tr("Indicizzabilità") },
-  { id: "external", label: tr("Link esterni") },
-  { id: "broken", label: tr("Link rotti") },
-  { id: "badlinks", label: tr("Link non scansionabili") },
-  { id: "custom", label: tr("Personalizzati") },
-  { id: "images", label: tr("Immagini") },
-  { id: "sitemap", label: tr("Sitemap") },
-  { id: "perf", label: tr("Prestazioni") },
-  { id: "hreflang", label: tr("Hreflang") },
-  { id: "schema", label: tr("Dati strutturati") },
-  { id: "duplicates", label: tr("Duplicati") },
-  ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
+/** Reports grouped as in the sidebar. */
+const GROUPS: { label: string; items: { id: Tab; label: string }[] }[] = [
+  {
+    label: tr("Panoramica"),
+    items: [
+      { id: "issues", label: tr("Problemi") },
+      { id: "compare", label: tr("Confronto") },
+    ],
+  },
+  {
+    label: tr("Pagine"),
+    items: [
+      { id: "internal", label: tr("Interni") },
+      { id: "codes", label: tr("Codici di risposta") },
+      { id: "redirects", label: tr("Redirect") },
+      { id: "index", label: tr("Indicizzabilità") },
+      { id: "perf", label: tr("Prestazioni") },
+      { id: "duplicates", label: tr("Duplicati") },
+    ],
+  },
+  {
+    label: tr("Contenuti"),
+    items: [
+      ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
+      { id: "schema", label: tr("Dati strutturati") },
+      { id: "hreflang", label: tr("Hreflang") },
+    ],
+  },
+  {
+    label: tr("Link"),
+    items: [
+      { id: "external", label: tr("Link esterni") },
+      { id: "broken", label: tr("Link rotti") },
+      { id: "badlinks", label: tr("Link non scansionabili") },
+    ],
+  },
+  {
+    label: tr("Risorse"),
+    items: [
+      { id: "images", label: tr("Immagini") },
+      { id: "sitemap", label: tr("Sitemap") },
+      { id: "custom", label: tr("Personalizzati") },
+    ],
+  },
 ];
+const TABS = GROUPS.flatMap((g) => g.items);
+
+/** Number of issue types in a report, coloured by the worst priority among them. */
+function issueBadge(list: Issue[]): { count: number; kind: string } | null {
+  if (list.length === 0) return null;
+  const kind = list.some((i) => i.priority === "Alta") ? "client" : list.some((i) => i.priority === "Media") ? "redirect" : "blocked";
+  return { count: list.length, kind };
+}
 
 const fmt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
 const when = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short" });
@@ -594,7 +628,6 @@ export default function App() {
     (): Change[] => (tab === "compare" && baselineData ? compareCrawls(baselineData, snapshot) : []),
     [tab, baselineData, snapshot],
   );
-  const highIssues = issues.filter((i) => i.priority === "Alta").length;
   const host = pages[0] ? new URL(pages[0].url).hostname : "crawl";
   const statusText = running
     ? `${STAGE_LABEL[progress?.stage ?? "pages"]}: ${(progress?.done ?? 0).toLocaleString(LOCALE)}` +
@@ -740,257 +773,274 @@ export default function App() {
             {elapsed !== null && <span className="time">{fmt.format(elapsed)} s</span>}
           </div>
 
-          <nav className="tabs" role="tablist" aria-label={tr("Report")}>
-            {TABS.map((t) => (
-              <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => {
-                  setTab(t.id);
-                  setJump((j) => ({ tab: null, filter: null, seq: j.seq + 1 }));
-                }}
-              >
-                {t.label}
-                {t.id === "broken" && broken.length > 0 && <span className="count">{broken.length}</span>}
-                {t.id === "issues" && highIssues > 0 && <span className="count">{highIssues}</span>}
-              </button>
-            ))}
-          </nav>
-
-          <div className="workspace">
-            {tab === "issues" && (
-              <DataTable
-                key="issues"
-                data={issues}
-                columns={issueColumns}
-                exportName={`${host}-problemi`}
-                onRowClick={(i) => {
-                  setTab(i.tab as Tab);
-                  setJump((j) => ({ tab: i.tab, filter: i.filter, seq: j.seq + 1 }));
-                }}
-              />
-            )}
-            {tab === "internal" && (
-              <DataTable
-                key={`internal-${jump.seq}`}
-                initialFilter={jump.tab === "internal" ? jump.filter ?? undefined : undefined}
-                data={pages}
-                columns={internalColumns}
-                exportName={`${host}-interni`}
-                {...selectByUrl}
-              />
-            )}
-            {tab === "codes" && (
-              <DataTable
-                key={`codes-${jump.seq}`}
-                initialFilter={jump.tab === "codes" ? jump.filter ?? undefined : undefined}
-                data={pages}
-                columns={codeColumns}
-                filters={CODE_FILTERS}
-                exportName={`${host}-codici-risposta`}
-                {...selectByUrl}
-              />
-            )}
-            {tab === "index" && (
-              <DataTable
-                key={`index-${jump.seq}`}
-                initialFilter={jump.tab === "index" ? jump.filter ?? undefined : undefined}
-                data={pages}
-                columns={indexColumns}
-                filters={indexTabFilters}
-                exportName={`${host}-indicizzabilita`}
-                {...selectByUrl}
-              />
-            )}
-            {tab === "external" && (
-              <DataTable
-                key={`external-${jump.seq}`}
-                initialFilter={jump.tab === "external" ? jump.filter ?? undefined : undefined}
-                data={external}
-                columns={externalColumns}
-                filters={EXTERNAL_FILTERS}
-                exportName={`${host}-link-esterni`}
-              />
-            )}
-            {tab === "broken" && (
-              <DataTable
-                key={`broken-${jump.seq}`}
-                initialFilter={jump.tab === "broken" ? jump.filter ?? undefined : undefined}
-                data={broken}
-                columns={brokenColumns}
-                filters={BROKEN_FILTERS}
-                exportName={`${host}-link-rotti`}
-                onRowClick={(b) => setSelected(b.source)}
-                isSelected={(b) => b.source === selected}
-              />
-            )}
-            {metaTab && (
-              <DataTable
-                key={`${tab}-${jump.seq}`}
-                initialFilter={jump.tab === tab ? jump.filter ?? undefined : undefined}
-                data={rows}
-                columns={metaTab.columns}
-                filters={metaTab.filters}
-                exportName={`${host}-${tab.replace("_", "-")}`}
-                {...selectByUrl}
-              />
-            )}
-            {tab === "compare" &&
-              (baseline && !baselineData ? (
-                <p className="empty">{tr("Carico il confronto…")}</p>
-              ) : (
-                <DataTable
-                  key={`compare-${baseline}-${jump.seq}`}
-                  data={changes}
-                  columns={changeColumns}
-                  filters={CHANGE_FILTERS}
-                  exportName={`${host}-confronto`}
-                  emptyText={baseline ? undefined : tr("Nessun crawl precedente da confrontare. Scegline uno dal menu.")}
-                  onRowClick={(c) => c.kind !== "issue" && c.kind !== "removed" && setSelected(c.key)}
-                  isSelected={(c) => c.key === selected}
-                  actions={
-                    <label className="compare-pick">
-                      {tr("Confronta con")}
-                      <select value={baseline ?? ""} onChange={(e) => setBaseline(e.currentTarget.value || null)}>
-                        <option value="">{tr("Nessun confronto")}</option>
-                        {recent
-                          .filter((c) => c.path !== crawlPath)
-                          .map((c) => (
-                            <option key={c.path} value={c.path}>
-                              {(c.start_url ?? tr("Crawl vuoto")) + " · " + when.format(new Date(c.modified_ms))}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                  }
-                />
+          <div className="main">
+            <nav className="sidebar" aria-label={tr("Report")}>
+              {GROUPS.map((g) => (
+                <div key={g.label} className="nav-group">
+                  <h3>{g.label}</h3>
+                  {g.items.map((t) => {
+                    const badge = t.id === "issues" ? issueBadge(issues) : issueBadge(issues.filter((i) => i.tab === t.id));
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        aria-current={tab === t.id ? "page" : undefined}
+                        onClick={() => {
+                          setTab(t.id);
+                          setJump((j) => ({ tab: null, filter: null, seq: j.seq + 1 }));
+                        }}
+                      >
+                        <span className="nav-label">{t.label}</span>
+                        {badge && (
+                          <span className={`nav-badge ${badge.kind}`} title={tr("Problemi")}>
+                            {badge.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               ))}
-            {tab === "redirects" && (
-              <DataTable
-                key={`redirects-${jump.seq}`}
-                initialFilter={jump.tab === "redirects" ? (jump.filter ?? undefined) : undefined}
-                data={redirectRows}
-                columns={redirectColumns}
-                filters={REDIRECT_FILTERS}
-                exportName={`${host}-redirect`}
-                {...selectByUrl}
-              />
-            )}
-            {tab === "custom" && (
-              <DataTable
-                key={`custom-${crawlPath}-${jump.seq}`}
-                data={customTable.rows}
-                columns={customTable.columns}
-                filters={customTable.filters}
-                exportName={`${host}-personalizzati`}
-                emptyText={
-                  custom.rules.length
-                    ? undefined
-                    : tr("Nessuna regola personalizzata. Aggiungine una in Impostazioni → Estrazione e ricerca.")
-                }
-                {...selectByUrl}
-              />
-            )}
-            {tab === "badlinks" && (
-              <DataTable
-                key={`badlinks-${jump.seq}`}
-                initialFilter={jump.tab === "badlinks" ? (jump.filter ?? undefined) : undefined}
-                data={badLinks}
-                columns={badLinkColumns}
-                filters={BAD_LINK_FILTERS}
-                exportName={`${host}-link-non-scansionabili`}
-                onRowClick={(b) => setSelected(b.page)}
-                isSelected={(b) => b.page === selected}
-              />
-            )}
-            {tab === "sitemap" && (
-              <DataTable
-                key={`sitemap-${jump.seq}`}
-                initialFilter={jump.tab === "sitemap" ? jump.filter ?? undefined : undefined}
-                data={pages}
-                columns={sitemapColumns}
-                filters={SITEMAP_FILTERS}
-                exportName={`${host}-sitemap`}
-                actions={
-                  <button type="button" className="secondary" onClick={saveSitemap}>
-                    {tr("Genera sitemap XML")}
-                  </button>
-                }
-                {...selectByUrl}
-              />
-            )}
-            {tab === "duplicates" && (
-              <DataTable
-                key={`duplicates-${jump.seq}`}
-                initialFilter={jump.tab === "duplicates" ? jump.filter ?? undefined : undefined}
-                data={dupRows}
-                columns={dupColumns}
-                filters={DUP_FILTERS}
-                exportName={`${host}-duplicati`}
-                {...selectByUrl}
-              />
-            )}
-            {tab === "schema" && (
-              <DataTable
-                key={`schema-${jump.seq}`}
-                initialFilter={jump.tab === "schema" ? jump.filter ?? undefined : undefined}
-                data={schemaRows}
-                columns={schemaColumns}
-                filters={schemaTabFilters}
-                exportName={`${host}-dati-strutturati`}
-                {...selectByUrl}
-              />
-            )}
-            {tab === "hreflang" && (
-              <DataTable
-                key={`hreflang-${jump.seq}`}
-                initialFilter={jump.tab === "hreflang" ? jump.filter ?? undefined : undefined}
-                data={hreflangRows}
-                columns={hreflangColumns}
-                filters={HREFLANG_FILTERS}
-                exportName={`${host}-hreflang`}
-                {...selectByUrl}
-              />
-            )}
-            {tab === "perf" && (
-              <DataTable
-                key={`perf-${jump.seq}`}
-                initialFilter={jump.tab === "perf" ? jump.filter ?? undefined : undefined}
-                data={pages}
-                columns={perfColumns}
-                filters={PERF_FILTERS}
-                exportName={`${host}-prestazioni`}
-                {...selectByUrl}
-              />
-            )}
-            {tab === "images" && (
-              <DataTable
-                key={`images-${jump.seq}`}
-                initialFilter={jump.tab === "images" ? jump.filter ?? undefined : undefined}
-                data={images}
-                columns={imageColumns}
-                filters={IMAGE_FILTERS}
-                exportName={`${host}-immagini`}
-                onRowClick={(i) => setSelectedImage(i.src)}
-                isSelected={(i) => i.src === selectedImage}
-              />
-            )}
-            {tab === "images" && selectedImage && crawlPath && (
-              <ImagePanel
-                crawlPath={crawlPath}
-                src={selectedImage}
-                onClose={() => setSelectedImage(null)}
-                onOpenPage={(page) => {
-                  setSelected(page);
-                  setTab("internal");
-                }}
-              />
-            )}
-            {tab !== "images" && selected && crawlPath && (
-              <DetailPanel
-                crawlPath={crawlPath}
-                url={selected}
-                onClose={() => setSelected(null)}
-                onNavigate={setSelected}
-              />
-            )}
+            </nav>
+
+            <div className="workspace">
+              {tab === "issues" && (
+                <DataTable
+                  key="issues"
+                  data={issues}
+                  columns={issueColumns}
+                  exportName={`${host}-problemi`}
+                  onRowClick={(i) => {
+                    setTab(i.tab as Tab);
+                    setJump((j) => ({ tab: i.tab, filter: i.filter, seq: j.seq + 1 }));
+                  }}
+                />
+              )}
+              {tab === "internal" && (
+                <DataTable
+                  key={`internal-${jump.seq}`}
+                  initialFilter={jump.tab === "internal" ? jump.filter ?? undefined : undefined}
+                  data={pages}
+                  columns={internalColumns}
+                  exportName={`${host}-interni`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "codes" && (
+                <DataTable
+                  key={`codes-${jump.seq}`}
+                  initialFilter={jump.tab === "codes" ? jump.filter ?? undefined : undefined}
+                  data={pages}
+                  columns={codeColumns}
+                  filters={CODE_FILTERS}
+                  exportName={`${host}-codici-risposta`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "index" && (
+                <DataTable
+                  key={`index-${jump.seq}`}
+                  initialFilter={jump.tab === "index" ? jump.filter ?? undefined : undefined}
+                  data={pages}
+                  columns={indexColumns}
+                  filters={indexTabFilters}
+                  exportName={`${host}-indicizzabilita`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "external" && (
+                <DataTable
+                  key={`external-${jump.seq}`}
+                  initialFilter={jump.tab === "external" ? jump.filter ?? undefined : undefined}
+                  data={external}
+                  columns={externalColumns}
+                  filters={EXTERNAL_FILTERS}
+                  exportName={`${host}-link-esterni`}
+                />
+              )}
+              {tab === "broken" && (
+                <DataTable
+                  key={`broken-${jump.seq}`}
+                  initialFilter={jump.tab === "broken" ? jump.filter ?? undefined : undefined}
+                  data={broken}
+                  columns={brokenColumns}
+                  filters={BROKEN_FILTERS}
+                  exportName={`${host}-link-rotti`}
+                  onRowClick={(b) => setSelected(b.source)}
+                  isSelected={(b) => b.source === selected}
+                />
+              )}
+              {metaTab && (
+                <DataTable
+                  key={`${tab}-${jump.seq}`}
+                  initialFilter={jump.tab === tab ? jump.filter ?? undefined : undefined}
+                  data={rows}
+                  columns={metaTab.columns}
+                  filters={metaTab.filters}
+                  exportName={`${host}-${tab.replace("_", "-")}`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "compare" &&
+                (baseline && !baselineData ? (
+                  <p className="empty">{tr("Carico il confronto…")}</p>
+                ) : (
+                  <DataTable
+                    key={`compare-${baseline}-${jump.seq}`}
+                    data={changes}
+                    columns={changeColumns}
+                    filters={CHANGE_FILTERS}
+                    exportName={`${host}-confronto`}
+                    emptyText={baseline ? undefined : tr("Nessun crawl precedente da confrontare. Scegline uno dal menu.")}
+                    onRowClick={(c) => c.kind !== "issue" && c.kind !== "removed" && setSelected(c.key)}
+                    isSelected={(c) => c.key === selected}
+                    actions={
+                      <label className="compare-pick">
+                        {tr("Confronta con")}
+                        <select value={baseline ?? ""} onChange={(e) => setBaseline(e.currentTarget.value || null)}>
+                          <option value="">{tr("Nessun confronto")}</option>
+                          {recent
+                            .filter((c) => c.path !== crawlPath)
+                            .map((c) => (
+                              <option key={c.path} value={c.path}>
+                                {(c.start_url ?? tr("Crawl vuoto")) + " · " + when.format(new Date(c.modified_ms))}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    }
+                  />
+                ))}
+              {tab === "redirects" && (
+                <DataTable
+                  key={`redirects-${jump.seq}`}
+                  initialFilter={jump.tab === "redirects" ? (jump.filter ?? undefined) : undefined}
+                  data={redirectRows}
+                  columns={redirectColumns}
+                  filters={REDIRECT_FILTERS}
+                  exportName={`${host}-redirect`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "custom" && (
+                <DataTable
+                  key={`custom-${crawlPath}-${jump.seq}`}
+                  data={customTable.rows}
+                  columns={customTable.columns}
+                  filters={customTable.filters}
+                  exportName={`${host}-personalizzati`}
+                  emptyText={
+                    custom.rules.length
+                      ? undefined
+                      : tr("Nessuna regola personalizzata. Aggiungine una in Impostazioni → Estrazione e ricerca.")
+                  }
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "badlinks" && (
+                <DataTable
+                  key={`badlinks-${jump.seq}`}
+                  initialFilter={jump.tab === "badlinks" ? (jump.filter ?? undefined) : undefined}
+                  data={badLinks}
+                  columns={badLinkColumns}
+                  filters={BAD_LINK_FILTERS}
+                  exportName={`${host}-link-non-scansionabili`}
+                  onRowClick={(b) => setSelected(b.page)}
+                  isSelected={(b) => b.page === selected}
+                />
+              )}
+              {tab === "sitemap" && (
+                <DataTable
+                  key={`sitemap-${jump.seq}`}
+                  initialFilter={jump.tab === "sitemap" ? jump.filter ?? undefined : undefined}
+                  data={pages}
+                  columns={sitemapColumns}
+                  filters={SITEMAP_FILTERS}
+                  exportName={`${host}-sitemap`}
+                  actions={
+                    <button type="button" className="secondary" onClick={saveSitemap}>
+                      {tr("Genera sitemap XML")}
+                    </button>
+                  }
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "duplicates" && (
+                <DataTable
+                  key={`duplicates-${jump.seq}`}
+                  initialFilter={jump.tab === "duplicates" ? jump.filter ?? undefined : undefined}
+                  data={dupRows}
+                  columns={dupColumns}
+                  filters={DUP_FILTERS}
+                  exportName={`${host}-duplicati`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "schema" && (
+                <DataTable
+                  key={`schema-${jump.seq}`}
+                  initialFilter={jump.tab === "schema" ? jump.filter ?? undefined : undefined}
+                  data={schemaRows}
+                  columns={schemaColumns}
+                  filters={schemaTabFilters}
+                  exportName={`${host}-dati-strutturati`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "hreflang" && (
+                <DataTable
+                  key={`hreflang-${jump.seq}`}
+                  initialFilter={jump.tab === "hreflang" ? jump.filter ?? undefined : undefined}
+                  data={hreflangRows}
+                  columns={hreflangColumns}
+                  filters={HREFLANG_FILTERS}
+                  exportName={`${host}-hreflang`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "perf" && (
+                <DataTable
+                  key={`perf-${jump.seq}`}
+                  initialFilter={jump.tab === "perf" ? jump.filter ?? undefined : undefined}
+                  data={pages}
+                  columns={perfColumns}
+                  filters={PERF_FILTERS}
+                  exportName={`${host}-prestazioni`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "images" && (
+                <DataTable
+                  key={`images-${jump.seq}`}
+                  initialFilter={jump.tab === "images" ? jump.filter ?? undefined : undefined}
+                  data={images}
+                  columns={imageColumns}
+                  filters={IMAGE_FILTERS}
+                  exportName={`${host}-immagini`}
+                  onRowClick={(i) => setSelectedImage(i.src)}
+                  isSelected={(i) => i.src === selectedImage}
+                />
+              )}
+              {tab === "images" && selectedImage && crawlPath && (
+                <ImagePanel
+                  crawlPath={crawlPath}
+                  src={selectedImage}
+                  onClose={() => setSelectedImage(null)}
+                  onOpenPage={(page) => {
+                    setSelected(page);
+                    setTab("internal");
+                  }}
+                />
+              )}
+              {tab !== "images" && selected && crawlPath && (
+                <DetailPanel
+                  crawlPath={crawlPath}
+                  url={selected}
+                  onClose={() => setSelected(null)}
+                  onNavigate={setSelected}
+                />
+              )}
+            </div>
           </div>
         </>
       )}

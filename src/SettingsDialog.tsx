@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { DEFAULT_SETTINGS, USER_AGENTS, type RuleSpec, type Settings } from "./settings";
 import { invoke } from "@tauri-apps/api/core";
-import { tr } from "./i18n";
+import { tr, trError } from "./i18n";
 
 type Props = {
   open: boolean;
   settings: Settings;
   onSave: (s: Settings) => void;
   onClose: () => void;
+  hasAiKey: boolean;
+  onAiKeyChange: (has: boolean) => void;
 };
 
 const CUSTOM = "custom";
 
 /** Modal form for crawl settings; edits apply only on Salva. */
-export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
+export function SettingsDialog({ open, settings, onSave, onClose, hasAiKey, onAiKeyChange }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState(settings);
   // undefined while unknown, null when no Chromium-based browser is installed
@@ -158,6 +160,8 @@ export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
           </button>
         </fieldset>
 
+        <AiKeyField hasKey={hasAiKey} onChange={onAiKeyChange} />
+
         <footer>
           <button type="button" className="link" onClick={() => setDraft(DEFAULT_SETTINGS)}>
             {tr("Ripristina predefinite")}
@@ -172,6 +176,64 @@ export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
         </footer>
       </form>
     </dialog>
+  );
+}
+
+/** The Anthropic API key lives in the macOS Keychain; it's saved here on its own, not with the settings. */
+function AiKeyField({ hasKey, onChange }: { hasKey: boolean; onChange: (has: boolean) => void }) {
+  const [key, setKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const store = (value: string) =>
+    invoke("ai_set_key", { key: value }).then(
+      () => {
+        setKey("");
+        setError(null);
+        onChange(value.trim() !== "");
+      },
+      (e) => setError(trError(String(e))),
+    );
+  return (
+    <fieldset>
+      <legend>{tr("Assistente AI")}</legend>
+      <small>
+        {tr("Usa Claude con la tua chiave API Anthropic per suggerire title e meta description, spiegare i problemi e scrivere un piano d'azione. I dati delle pagine analizzate vengono inviati ad Anthropic.")}
+      </small>
+      {hasKey ? (
+        <div className="key-row">
+          <span>{tr("Chiave salvata nel Portachiavi di macOS.")}</span>
+          <button type="button" className="link" onClick={() => store("")}>
+            {tr("Rimuovi chiave")}
+          </button>
+        </div>
+      ) : (
+        <div className="key-row">
+          <input
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              // Enter would submit the settings form and drop the key
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (key.trim()) store(key);
+              }
+            }}
+            placeholder="sk-ant-…"
+            aria-label={tr("Chiave API Anthropic")}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <button type="button" className="ghost" onClick={() => store(key)} disabled={!key.trim()}>
+            {tr("Salva chiave")}
+          </button>
+        </div>
+      )}
+      {error && (
+        <small className="error" role="alert">
+          {error}
+        </small>
+      )}
+    </fieldset>
   );
 }
 

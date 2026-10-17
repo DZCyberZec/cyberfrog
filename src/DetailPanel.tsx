@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DataTable, helperFor } from "./DataTable";
-import { codeLabel, kindOf, type LinkRow, type PageLinks } from "./pages";
+import { codeLabel, kindOf, type IssueDef, type LinkRow, type Page, type PageLinks } from "./pages";
 import { tr, trError } from "./i18n";
+import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
+import { explainPrompt, metaPrompt } from "./ai";
 
 const link = helperFor<LinkRow>();
 const columns = link.columns([
@@ -20,16 +22,23 @@ const columns = link.columns([
 type Props = {
   crawlPath: string;
   url: string;
+  /** The crawled page behind `url`, when there is one; the AI view needs it. */
+  page: Page | undefined;
+  issues: IssueDef[];
+  hasAiKey: boolean;
   onClose: () => void;
   /** Called with a same-site URL the user picked inside the panel. */
   onNavigate: (url: string) => void;
 };
 
 /** Inlinks and outlinks of one crawled URL, loaded on demand from the crawl file. */
-export function DetailPanel({ crawlPath, url, onClose, onNavigate }: Props) {
+export function DetailPanel({ crawlPath, url, page, issues, hasAiKey, onClose, onNavigate }: Props) {
   const [links, setLinks] = useState<PageLinks | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"inlinks" | "outlinks">("inlinks");
+  const [view, setView] = useState<"inlinks" | "outlinks" | "ai">("inlinks");
+  const ai = useAi();
+  const { reset } = ai;
+  useEffect(reset, [url, reset]); // an answer is about one page
 
   useEffect(() => {
     let current = true; // ignore answers for a URL the user already left
@@ -56,6 +65,9 @@ export function DetailPanel({ crawlPath, url, onClose, onNavigate }: Props) {
           <button type="button" role="tab" aria-selected={view === "outlinks"} onClick={() => setView("outlinks")}>
             {tr("Outlink")} {links && <span className="count">{links.outlinks.length}</span>}
           </button>
+          <button type="button" role="tab" aria-selected={view === "ai"} onClick={() => setView("ai")}>
+            {tr("Assistente AI")}
+          </button>
         </nav>
         <span className="detail-url" title={url}>
           {url}
@@ -64,14 +76,34 @@ export function DetailPanel({ crawlPath, url, onClose, onNavigate }: Props) {
           ✕
         </button>
       </header>
-      {error ? (
+      {view === "ai" ? (
+        <div className="ai-view">
+          {!page ? (
+            <p className="empty">{tr("Questo URL non è stato scansionato.")}</p>
+          ) : !hasAiKey ? (
+            <p className="empty">{tr(NO_KEY_TEXT)}</p>
+          ) : (
+            <>
+              <div className="ai-actions">
+                <button type="button" onClick={() => ai.run(metaPrompt(page))} disabled={ai.state.status === "loading"}>
+                  {tr("Suggerisci title e meta description")}
+                </button>
+                <button type="button" onClick={() => ai.run(explainPrompt(page, issues))} disabled={ai.state.status === "loading"}>
+                  {issues.length ? tr("Spiega i problemi ({n})", { n: issues.length }) : tr("Come migliorarla")}
+                </button>
+              </div>
+              <AiOutput state={ai.state} />
+            </>
+          )}
+        </div>
+      ) : error ? (
         <p className="empty">{error}</p>
       ) : !links ? (
         <p className="empty">{tr("Carico i link…")}</p>
       ) : (
         <DataTable
           key={`${url}-${view}`}
-          data={links[view]}
+          data={links[view as "inlinks" | "outlinks"]}
           columns={columns}
           exportName={`${view}-${slug}`}
           onRowClick={(r) => !r.external && onNavigate(r.url)}

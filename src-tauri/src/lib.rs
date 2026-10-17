@@ -1,3 +1,4 @@
+mod ai;
 pub mod crawler;
 pub mod mcp;
 pub mod report;
@@ -215,6 +216,24 @@ fn save_crawl_as(from: String, to: String) -> Result<(), String> {
 }
 
 /// Most recent crawls in the app data dir, newest first; unreadable files are skipped.
+/// Whether an Anthropic API key is stored in the Keychain (the key itself never leaves Rust).
+#[tauri::command]
+fn ai_has_key() -> bool {
+    ai::get_key().is_some()
+}
+
+/// Stores the API key in the Keychain; an empty key removes it.
+#[tauri::command]
+fn ai_set_key(key: String) -> Result<(), String> {
+    ai::set_key(&key)
+}
+
+/// Asks Claude with the given system prompt and returns the answer text.
+#[tauri::command]
+async fn ai_complete(system: String, prompt: String) -> Result<String, String> {
+    ai::complete(&system, &prompt).await
+}
+
 /// The browser JavaScript rendering would use, for the settings dialog.
 #[tauri::command]
 fn find_browser() -> Option<String> {
@@ -272,6 +291,9 @@ pub fn run() {
             save_crawl_as,
             list_crawls,
             find_browser,
+            ai_has_key,
+            ai_set_key,
+            ai_complete,
             write_text_file
         ])
         .run(tauri::generate_context!())

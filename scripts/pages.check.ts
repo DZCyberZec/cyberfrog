@@ -9,6 +9,8 @@ const {
   REDIRECT_FILTERS, redirectChains, siteTree, depthCounts, JS_FILTERS,
 } = await import("../src/pages.ts");
 const { hasTranslation } = await import("../src/i18n.ts");
+const { pageIssues, withExamples } = await import("../src/pages.ts");
+const { systemPrompt, metaPrompt, explainPrompt, planPrompt } = await import("../src/ai.ts");
 
 const base: Page = {
   url: "", depth: 0, status: 200, content_type: "text/html", redirect_to: null, blocked_by_robots: false,
@@ -321,4 +323,18 @@ assert.deepEqual(pick(jp, JS_FILTERS, "all"), ["/spa", "/widget", "/fail"], "pag
 assert.deepEqual(pick(jp, JS_FILTERS, "js-content"), ["/spa"], "60 extra words in 1000 is a widget, not content");
 assert.deepEqual(pick(jp, JS_FILTERS, "js-links"), ["/spa"]);
 assert.deepEqual(pick(jp, JS_FILTERS, "errors"), ["/fail"]);
+const ap: Page[] = [
+  { ...base, url: "https://s.it/", title: "Home", h1: "Benvenuti", meta_description: "x".repeat(130) },
+  { ...base, url: "https://s.it/a", title: null, h1: "A", meta_description: "y".repeat(130) },
+  { ...base, url: "https://s.it/b", title: null, h1: "B", meta_description: "z".repeat(130) },
+];
+const asnap = snap(ap);
+assert.deepEqual(pageIssues("https://s.it/a", asnap).map((i) => i.label), ["Title mancante", "Canonical mancante", "Pagine indicizzabili non nella sitemap"]);
+assert.ok(!pageIssues("https://s.it/", asnap).some((i) => i.label === "Title mancante"));
+const withEx = withExamples(allIssues(asnap), asnap);
+assert.deepEqual(withEx.find((i) => i.label === "Title mancante")?.examples, ["https://s.it/a", "https://s.it/b"]);
+assert.match(systemPrompt(), /Write in Italian/);
+assert.match(metaPrompt(ap[0]), /Title: Home\n/);
+assert.match(explainPrompt(ap[1], pageIssues(ap[1].url, asnap)), /- \[Alta\] Title mancante/);
+assert.match(planPrompt("s.it", ap, withEx), /Title mancante: 2\..*Examples: https:\/\/s\.it\/a, https:\/\/s\.it\/b/);
 console.log("pages.check: ok");

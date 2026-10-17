@@ -172,6 +172,33 @@ button { font: inherit; }
 }
 .detail .close:hover { color: var(--text); background: var(--sunken); }
 
+/* AI assistant: actions and Claude's answer in the detail panel and the Issues plan */
+.ai-view { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; }
+.ai-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ai-actions button {
+  padding: 6px 12px; font: inherit; font-weight: 600; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--radius); cursor: pointer;
+}
+.ai-actions button:hover:not(:disabled) { background: var(--sunken); }
+.ai-actions button:disabled { opacity: 0.5; cursor: default; }
+.ai-out { position: relative; margin: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--sunken); }
+.ai-out.muted { color: var(--muted); }
+.ai-out.error { color: var(--client); background: var(--client-bg); border-color: transparent; }
+.ai-text { white-space: pre-wrap; line-height: 1.55; max-width: 80ch; padding-right: 64px; }
+.ai-out .copy {
+  position: absolute; top: 8px; right: 8px; padding: 3px 10px; font: inherit; font-size: 12px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
+}
+.ai-out .copy:hover { color: var(--text); }
+.ai-plan { max-height: 45%; overflow: auto; padding: 12px 16px; border-bottom: 2px solid var(--border-strong); background: var(--surface); }
+.ai-plan header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ai-plan h2 { margin: 0; font-size: 14px; }
+.ai-plan .close { width: 28px; height: 28px; color: var(--muted); background: none; border: 0; border-radius: var(--radius); cursor: pointer; }
+.ai-plan .close:hover { color: var(--text); background: var(--sunken); }
+dialog.settings .key-row { display: flex; align-items: center; gap: 8px; }
+dialog.settings .key-row input { flex: 1; }
+dialog.settings small.error { color: var(--client); }
+
 /* Filters + export */
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .filters button {
@@ -235,7 +262,7 @@ dialog.settings legend { padding: 0 4px; font-size: 12px; font-weight: 600; colo
 dialog.settings label { display: flex; flex-direction: column; gap: 4px; font-weight: 500; }
 dialog.settings label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
 dialog.settings small { color: var(--muted); font-weight: 400; }
-dialog.settings input[type="number"], dialog.settings input[type="text"], dialog.settings select, dialog.settings textarea {
+dialog.settings input[type="number"], dialog.settings input[type="text"], dialog.settings input[type="password"], dialog.settings select, dialog.settings textarea {
   padding: 7px 10px; font: inherit; color: var(--text); background: var(--sunken);
   border: 1px solid var(--border); border-radius: var(--radius);
 }

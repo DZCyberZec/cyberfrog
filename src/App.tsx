@@ -8,6 +8,8 @@ import { DataTable, helperFor } from "./DataTable";
 import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
 import { SettingsDialog } from "./SettingsDialog";
+import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
+import { planPrompt } from "./ai";
 import { SiteStructure } from "./SiteStructure";
 import { loadSettings, saveSettings, type Settings } from "./settings";
 import {
@@ -30,6 +32,8 @@ import {
   DUP_FILTERS,
   dupPages,
   allIssues,
+  pageIssues,
+  withExamples,
   compareCrawls,
   CHANGE_FILTERS,
   CHANGE_LABEL,
@@ -475,6 +479,13 @@ export default function App() {
   });
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hasAiKey, setHasAiKey] = useState(false);
+  useEffect(() => {
+    invoke<boolean>("ai_has_key").then(setHasAiKey, () => setHasAiKey(false));
+  }, []);
+  const plan = useAi();
+  const resetPlan = plan.reset;
+  useEffect(resetPlan, [pages, resetPlan]); // a plan belongs to the crawl it was written for
 
   const refreshRecent = useCallback(() => {
     invoke<CrawlSummary[]>("list_crawls").then(setRecent, () => setRecent([]));
@@ -620,6 +631,11 @@ export default function App() {
   );
   const issues = useMemo(() => allIssues(snapshot, dupRows), [snapshot, dupRows]);
   const redirectRows = useMemo(() => redirectChains(pages), [pages]);
+  const selectedPage = useMemo(() => pages.find((p) => p.url === selected), [pages, selected]);
+  const selectedIssues = useMemo(
+    () => (selected ? pageIssues(selected, snapshot, dupRows) : []),
+    [selected, snapshot, dupRows],
+  );
   const customTable = useMemo(() => {
     const cust = helperFor<CustomRow>();
     return {
@@ -689,7 +705,7 @@ export default function App() {
           />
           {running ? (
             <button type="button" className="stop" onClick={stopCrawl} disabled={stopped}>
-              {stopped ? "Interruzione…" : "Stop"}
+              {stopped ? tr("Interruzione…") : tr("Stop")}
             </button>
           ) : (
             <button type="submit">{tr("Avvia")}</button>
@@ -727,6 +743,8 @@ export default function App() {
           setSettingsOpen(false);
         }}
         onClose={() => setSettingsOpen(false)}
+        hasAiKey={hasAiKey}
+        onAiKeyChange={setHasAiKey}
       />
 
       {error && (
@@ -824,12 +842,34 @@ export default function App() {
             </nav>
 
             <div className="workspace">
+              {tab === "issues" && plan.state.status !== "idle" && (
+                <section className="ai-plan" aria-label={tr("Piano d'azione AI")}>
+                  <header>
+                    <h2>{tr("Piano d'azione AI")}</h2>
+                    <button type="button" className="close" onClick={plan.reset} aria-label={tr("Chiudi piano")}>
+                      ✕
+                    </button>
+                  </header>
+                  <AiOutput state={plan.state} />
+                </section>
+              )}
               {tab === "issues" && (
                 <DataTable
                   key="issues"
                   data={issues}
                   columns={issueColumns}
                   exportName={`${host}-problemi`}
+                  actions={
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={!hasAiKey || issues.length === 0 || plan.state.status === "loading"}
+                      title={hasAiKey ? undefined : tr(NO_KEY_TEXT)}
+                      onClick={() => plan.run(planPrompt(host, pages, withExamples(issues, snapshot, dupRows)))}
+                    >
+                      {tr("Piano d'azione AI")}
+                    </button>
+                  }
                   onRowClick={(i) => {
                     setTab(i.tab as Tab);
                     setJump((j) => ({ tab: i.tab, filter: i.filter, seq: j.seq + 1 }));
@@ -1077,6 +1117,9 @@ export default function App() {
                 <DetailPanel
                   crawlPath={crawlPath}
                   url={selected}
+                  page={selectedPage}
+                  issues={selectedIssues}
+                  hasAiKey={hasAiKey}
                   onClose={() => setSelected(null)}
                   onNavigate={setSelected}
                 />

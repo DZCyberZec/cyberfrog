@@ -627,8 +627,33 @@ export type CrawlSnapshot = {
 
 /** Every issue of a crawl. Pass `dups` from dupPages() to include duplicate content (it is costly). */
 export function allIssues(d: CrawlSnapshot, dups: DupPage[] = []): Issue[] {
+  return countIssues(ISSUES, crawlReports(d, dups));
+}
+
+/** The issues one URL appears in, as page-level findings (image issues have no page and are left out). */
+export function pageIssues(url: string, d: CrawlSnapshot, dups: DupPage[] = []): IssueDef[] {
+  const reports = crawlReports(d, dups);
+  return ISSUES.filter((def) => {
+    const report = reports[def.tab];
+    const filter = report?.filters.find((f) => f.id === def.filter);
+    return !!filter && report.rows.some((r) => (r.url ?? r.page ?? r.source) === url && filter.test(r));
+  });
+}
+
+/** Issues with up to `n` example URLs each (image issues give image URLs). */
+export function withExamples(issues: Issue[], d: CrawlSnapshot, dups: DupPage[] = [], n = 5): (Issue & { examples: string[] })[] {
+  const reports = crawlReports(d, dups);
+  return issues.map((i) => {
+    const report = reports[i.tab];
+    const filter = report?.filters.find((f) => f.id === i.filter);
+    const rows = filter ? report.rows.filter(filter.test).slice(0, n) : [];
+    return { ...i, examples: rows.map((r) => r.url ?? r.page ?? r.source ?? r.src).filter(Boolean) };
+  });
+}
+
+function crawlReports(d: CrawlSnapshot, dups: DupPage[]): Reports {
   const schema = schemaPages(d.pages, d.structured);
-  const reports: Reports = {
+  return {
     codes: { rows: d.pages, filters: CODE_FILTERS },
     index: { rows: d.pages, filters: indexFilters(d.pages) },
     broken: { rows: d.broken, filters: BROKEN_FILTERS },
@@ -643,7 +668,6 @@ export function allIssues(d: CrawlSnapshot, dups: DupPage[] = []): Issue[] {
     duplicates: { rows: dups, filters: DUP_FILTERS },
     ...Object.fromEntries(CHECKS.map((c) => [c.field, { rows: metaRows(d.pages, c.field), filters: metaFilters(c) }])),
   };
-  return countIssues(ISSUES, reports);
 }
 
 export type ChangeKind = "added" | "removed" | "status" | "indexability" | "title" | "meta_description" | "h1" | "canonical" | "issue";

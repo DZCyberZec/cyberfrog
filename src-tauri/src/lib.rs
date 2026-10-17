@@ -5,6 +5,7 @@ pub mod mcp;
 pub mod report;
 pub mod schedule;
 pub mod topics;
+mod tracker;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -260,6 +261,22 @@ async fn ai_complete(engine: String, system: String, prompt: String) -> Result<S
     ai::complete(&engine, &system, &prompt).await
 }
 
+/// Asks a question the way an AI search engine would, with web search, for the visibility tracker.
+#[tauri::command]
+async fn ai_search(engine: String, query: String) -> Result<ai::SearchAnswer, String> {
+    ai::search(&engine, &query).await
+}
+
+#[tauri::command]
+fn tracker_load() -> serde_json::Value {
+    tracker::load()
+}
+
+#[tauri::command]
+fn tracker_save(data: serde_json::Value) -> Result<(), String> {
+    tracker::save(&data)
+}
+
 /// Topics a competitor covers that you don't, and the reverse, from two crawl files.
 #[tauri::command]
 fn content_gap(mine: String, theirs: String) -> Result<topics::gap::ContentGap, String> {
@@ -347,6 +364,9 @@ pub fn run() {
             find_browser,
             list_schedules,
             content_gap,
+            ai_search,
+            tracker_load,
+            tracker_save,
             add_schedule,
             remove_schedule,
             ai_status,

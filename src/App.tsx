@@ -25,13 +25,16 @@ import {
   schemaPages,
   DUP_FILTERS,
   dupPages,
-  ISSUES,
-  countIssues,
+  allIssues,
+  compareCrawls,
+  CHANGE_FILTERS,
+  CHANGE_LABEL,
+  type Change,
+  type CrawlSnapshot,
   BAD_LINK_FILTERS,
   badLinkReason,
   type BadLinkRow,
   type Issue,
-  type Reports,
   buildSitemapXml,
   medianMs,
   codeLabel,
@@ -249,6 +252,30 @@ const issueColumns = iss.columns([
   iss.accessor("fix", { header: tr("Cosa fare"), size: 520 }),
 ]);
 
+const CHANGE_BADGE: Record<Change["kind"], string> = {
+  added: "ok",
+  removed: "client",
+  status: "redirect",
+  indexability: "redirect",
+  title: "blocked",
+  meta_description: "blocked",
+  h1: "blocked",
+  canonical: "blocked",
+  issue: "server",
+};
+const chg = helperFor<Change>();
+const changeColumns = chg.columns([
+  chg.accessor((c) => CHANGE_LABEL[c.kind], {
+    id: "kind",
+    header: tr("Cambiamento"),
+    size: 200,
+    cell: (c) => <span className={`badge ${CHANGE_BADGE[c.row.original.kind]}`}>{c.getValue()}</span>,
+  }),
+  chg.accessor("key", { header: tr("URL o problema"), size: 440 }),
+  chg.accessor("before", { header: tr("Prima"), size: 300 }),
+  chg.accessor("after", { header: tr("Dopo"), size: 300 }),
+]);
+
 const bad = helperFor<BadLinkRow>();
 const badLinkColumns = bad.columns([
   bad.accessor("page", { header: tr("Pagina"), size: 400 }),
@@ -275,6 +302,7 @@ const metaTabs = CHECKS.map((check) => ({
 
 type Tab =
   | "issues"
+  | "compare"
   | "internal"
   | "codes"
   | "index"
@@ -290,6 +318,7 @@ type Tab =
   | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
   { id: "issues", label: tr("Problemi") },
+  { id: "compare", label: tr("Confronto") },
   { id: "internal", label: tr("Interni") },
   { id: "codes", label: tr("Codici di risposta") },
   { id: "index", label: tr("Indicizzabilità") },
@@ -339,6 +368,9 @@ export default function App() {
   const [hreflang, setHreflang] = useState<HreflangRow[]>([]);
   const [structured, setStructured] = useState<StructuredRow[]>([]);
   const [badLinks, setBadLinks] = useState<BadLinkRow[]>([]);
+  /** Crawl file the current crawl is compared with, and its loaded data. */
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const [baselineData, setBaselineData] = useState<CrawlSnapshot | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [crawlPath, setCrawlPath] = useState<string | null>(null);
   const [recent, setRecent] = useState<CrawlSummary[]>([]);
@@ -376,7 +408,39 @@ export default function App() {
     setSelectedImage(null);
     setCrawlPath(data.path);
     if (data.pages[0]) setUrl(data.pages[0].url);
+    pickBaseline(data);
   }
+
+  /** Compare with the latest earlier crawl of the same host, like an automatic crawl comparison. */
+  function pickBaseline(data: CrawlData) {
+    setBaseline(null);
+    const host = data.pages[0] ? new URL(data.pages[0].url).hostname : null;
+    invoke<CrawlSummary[]>("list_crawls").then((list) => {
+      setRecent(list);
+      const self = list.find((c) => c.path === data.path);
+      const earlier = list.find(
+        (c) =>
+          c.path !== data.path &&
+          c.start_url !== null &&
+          new URL(c.start_url).hostname === host &&
+          (!self || c.modified_ms < self.modified_ms),
+      );
+      setBaseline(earlier?.path ?? null);
+    }, () => setRecent([]));
+  }
+
+  useEffect(() => {
+    setBaselineData(null);
+    if (!baseline) return;
+    let current = true; // a newer choice may land first
+    invoke<CrawlData>("open_crawl", { path: baseline }).then(
+      (d) => current && setBaselineData(d),
+      (err) => current && setError(trError(String(err))),
+    );
+    return () => {
+      current = false;
+    };
+  }, [baseline]);
 
   async function start(e: FormEvent) {
     e.preventDefault();
@@ -464,22 +528,15 @@ export default function App() {
   const metaTab = metaTabs.find((t) => t.check.field === tab);
   const rows = useMemo(() => (metaTab ? metaRows(pages, metaTab.check.field) : []), [pages, metaTab]);
   // duplicates are only analysed on their tab and here; they never rank Alta, so the badge stays right
-  const issues = useMemo((): Issue[] => {
-    const reports: Reports = {
-      codes: { rows: pages, filters: CODE_FILTERS },
-      index: { rows: pages, filters: indexTabFilters },
-      broken: { rows: broken, filters: BROKEN_FILTERS },
-      badlinks: { rows: badLinks, filters: BAD_LINK_FILTERS },
-      images: { rows: images, filters: IMAGE_FILTERS },
-      sitemap: { rows: pages, filters: SITEMAP_FILTERS },
-      perf: { rows: pages, filters: PERF_FILTERS },
-      hreflang: { rows: hreflangRows, filters: HREFLANG_FILTERS },
-      schema: { rows: schemaRows, filters: schemaTabFilters },
-      duplicates: { rows: dupRows, filters: DUP_FILTERS },
-      ...Object.fromEntries(metaTabs.map((m) => [m.check.field, { rows: metaRows(pages, m.check.field), filters: m.filters }])),
-    };
-    return countIssues(ISSUES, reports);
-  }, [pages, indexTabFilters, broken, badLinks, images, hreflangRows, schemaRows, schemaTabFilters, dupRows]);
+  const snapshot = useMemo(
+    (): CrawlSnapshot => ({ pages, broken, images, hreflang, structured, bad_links: badLinks }),
+    [pages, broken, images, hreflang, structured, badLinks],
+  );
+  const issues = useMemo(() => allIssues(snapshot, dupRows), [snapshot, dupRows]);
+  const changes = useMemo(
+    (): Change[] => (tab === "compare" && baselineData ? compareCrawls(baselineData, snapshot) : []),
+    [tab, baselineData, snapshot],
+  );
   const highIssues = issues.filter((i) => i.priority === "Alta").length;
   const host = pages[0] ? new URL(pages[0].url).hostname : "crawl";
   const statusText = running
@@ -718,6 +775,36 @@ export default function App() {
                 {...selectByUrl}
               />
             )}
+            {tab === "compare" &&
+              (baseline && !baselineData ? (
+                <p className="empty">{tr("Carico il confronto…")}</p>
+              ) : (
+                <DataTable
+                  key={`compare-${baseline}-${jump.seq}`}
+                  data={changes}
+                  columns={changeColumns}
+                  filters={CHANGE_FILTERS}
+                  exportName={`${host}-confronto`}
+                  emptyText={baseline ? undefined : tr("Nessun crawl precedente da confrontare. Scegline uno dal menu.")}
+                  onRowClick={(c) => c.kind !== "issue" && c.kind !== "removed" && setSelected(c.key)}
+                  isSelected={(c) => c.key === selected}
+                  actions={
+                    <label className="compare-pick">
+                      {tr("Confronta con")}
+                      <select value={baseline ?? ""} onChange={(e) => setBaseline(e.currentTarget.value || null)}>
+                        <option value="">{tr("Nessun confronto")}</option>
+                        {recent
+                          .filter((c) => c.path !== crawlPath)
+                          .map((c) => (
+                            <option key={c.path} value={c.path}>
+                              {(c.start_url ?? tr("Crawl vuoto")) + " · " + when.format(new Date(c.modified_ms))}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  }
+                />
+              ))}
             {tab === "badlinks" && (
               <DataTable
                 key={`badlinks-${jump.seq}`}

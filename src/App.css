@@ -262,3 +262,9 @@ dialog.settings button.link { padding: 7px 0; color: var(--muted); background: n
 }
 .statusbar .powered strong { color: var(--text); font-weight: 600; }
 .statusbar .powered:hover { background: var(--border); }
+
+.compare-pick { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.compare-pick select {
+  max-width: 340px; padding: 4px 8px; font: inherit; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius);
+}

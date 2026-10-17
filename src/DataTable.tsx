@@ -42,6 +42,8 @@ type Props<T extends RowData> = {
   actions?: ReactNode;
   /** Filter selected when the table mounts; defaults to the first one. */
   initialFilter?: string;
+  /** Shown instead of the generic message when there are no rows. */
+  emptyText?: string;
 };
 
 /** Filter chips, CSV export and a sortable, virtualized table. Give it a `key` per report. */
@@ -54,6 +56,7 @@ export function DataTable<T extends RowData>({
   isSelected,
   actions,
   initialFilter,
+  emptyText,
 }: Props<T>) {
   const [filterId, setFilterId] = useState(initialFilter ?? filters?.[0]?.id);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
@@ -158,7 +161,7 @@ export function DataTable<T extends RowData>({
             {padBottom > 0 && <tr style={{ height: padBottom }} />}
           </tbody>
         </table>
-        {rows.length === 0 && <p className="empty">{tr("Nessun URL in questa vista.")}</p>}
+        {rows.length === 0 && <p className="empty">{emptyText ?? tr("Nessun URL in questa vista.")}</p>}
       </div>
     </div>
   );

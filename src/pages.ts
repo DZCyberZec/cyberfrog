@@ -574,3 +574,92 @@ export function badLinkReason(reason: string): string {
   if (reason.startsWith("URL non valido")) return tr("URL non valido") + reason.slice("URL non valido".length);
   return tr(reason.replace(tag, "{tag}"), { tag });
 }
+
+/** What a crawl file holds, as the UI loads it (mirrors `CrawlData` in src-tauri/src/lib.rs, minus the path). */
+export type CrawlSnapshot = {
+  pages: Page[];
+  broken: BrokenLink[];
+  images: ImageRow[];
+  hreflang: HreflangRow[];
+  structured: StructuredRow[];
+  bad_links: BadLinkRow[];
+};
+
+/** Every issue of a crawl. Pass `dups` from dupPages() to include duplicate content (it is costly). */
+export function allIssues(d: CrawlSnapshot, dups: DupPage[] = []): Issue[] {
+  const schema = schemaPages(d.pages, d.structured);
+  const reports: Reports = {
+    codes: { rows: d.pages, filters: CODE_FILTERS },
+    index: { rows: d.pages, filters: indexFilters(d.pages) },
+    broken: { rows: d.broken, filters: BROKEN_FILTERS },
+    badlinks: { rows: d.bad_links, filters: BAD_LINK_FILTERS },
+    images: { rows: d.images, filters: IMAGE_FILTERS },
+    sitemap: { rows: d.pages, filters: SITEMAP_FILTERS },
+    perf: { rows: d.pages, filters: PERF_FILTERS },
+    hreflang: { rows: hreflangPages(d.pages, d.hreflang), filters: HREFLANG_FILTERS },
+    schema: { rows: schema, filters: schemaFilters(schema) },
+    duplicates: { rows: dups, filters: DUP_FILTERS },
+    ...Object.fromEntries(CHECKS.map((c) => [c.field, { rows: metaRows(d.pages, c.field), filters: metaFilters(c) }])),
+  };
+  return countIssues(ISSUES, reports);
+}
+
+export type ChangeKind = "added" | "removed" | "status" | "indexability" | "title" | "meta_description" | "h1" | "canonical" | "issue";
+
+/** One difference between two crawls: a URL that changed, or an issue whose URL count changed. */
+export type Change = { kind: ChangeKind; key: string; before: string; after: string };
+
+const CONTENT_FIELDS = ["title", "meta_description", "h1", "canonical"] as const;
+
+/** What changed from `prev` to `cur`: pages, statuses, indexability, key tags and issue counts. */
+export function compareCrawls(prev: CrawlSnapshot, cur: CrawlSnapshot): Change[] {
+  const before = new Map(prev.pages.map((p) => [p.url, p]));
+  const after = new Map(cur.pages.map((p) => [p.url, p]));
+  const indexability = (p: Page) => nonIndexableReason(p) ?? tr("Indicizzabile");
+  const changes: Change[] = [];
+  for (const p of cur.pages) {
+    const old = before.get(p.url);
+    if (!old) {
+      changes.push({ kind: "added", key: p.url, before: "", after: statusLabel(p) });
+      continue;
+    }
+    if (statusLabel(old) !== statusLabel(p)) changes.push({ kind: "status", key: p.url, before: statusLabel(old), after: statusLabel(p) });
+    if (indexability(old) !== indexability(p)) changes.push({ kind: "indexability", key: p.url, before: indexability(old), after: indexability(p) });
+    for (const f of CONTENT_FIELDS) {
+      if ((old[f] ?? "") !== (p[f] ?? "")) changes.push({ kind: f, key: p.url, before: old[f] ?? "", after: p[f] ?? "" });
+    }
+  }
+  for (const p of prev.pages) {
+    if (!after.has(p.url)) changes.push({ kind: "removed", key: p.url, before: statusLabel(p), after: "" });
+  }
+  const countsBefore = new Map(allIssues(prev, dupPages(prev.pages)).map((i) => [i.label, i.count]));
+  const countsAfter = new Map(allIssues(cur, dupPages(cur.pages)).map((i) => [i.label, i.count]));
+  for (const label of new Set([...countsBefore.keys(), ...countsAfter.keys()])) {
+    const [b, a] = [countsBefore.get(label) ?? 0, countsAfter.get(label) ?? 0];
+    if (a !== b) changes.push({ kind: "issue", key: label, before: String(b), after: String(a) });
+  }
+  return changes;
+}
+
+export const CHANGE_LABEL: Record<ChangeKind, string> = {
+  added: tr("Nuova pagina"),
+  removed: tr("Pagina rimossa"),
+  status: tr("Stato cambiato"),
+  indexability: tr("Indicizzabilità cambiata"),
+  title: tr("Title cambiato"),
+  meta_description: tr("Meta description cambiata"),
+  h1: tr("H1 cambiato"),
+  canonical: tr("Canonical cambiato"),
+  issue: tr("Problema"),
+};
+
+const contentKinds: ChangeKind[] = ["title", "meta_description", "h1", "canonical"];
+export const CHANGE_FILTERS: FilterDef<Change>[] = [
+  { id: "all", label: tr("Tutti"), test: () => true },
+  { id: "issues", label: tr("Problemi"), test: (c) => c.kind === "issue" },
+  { id: "added", label: tr("Nuove"), test: (c) => c.kind === "added" },
+  { id: "removed", label: tr("Rimosse"), test: (c) => c.kind === "removed" },
+  { id: "status", label: tr("Stato"), test: (c) => c.kind === "status" },
+  { id: "indexability", label: tr("Indicizzabilità"), test: (c) => c.kind === "indexability" },
+  { id: "content", label: tr("Title, meta, H1, canonical"), test: (c) => contentKinds.includes(c.kind) },
+];

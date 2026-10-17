@@ -5,7 +5,7 @@ import type { Page } from "../src/pages.ts";
 // expected labels below are Italian, the source language; pin it before the modules load
 Object.defineProperty(globalThis, "navigator", { value: { language: "it-IT" }, configurable: true });
 const {
-  BROKEN_FILTERS, BAD_LINK_FILTERS, badLinkReason, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
+  BROKEN_FILTERS, CHANGE_FILTERS, compareCrawls, allIssues, BAD_LINK_FILTERS, badLinkReason, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
 } = await import("../src/pages.ts");
 const { hasTranslation } = await import("../src/i18n.ts");
 
@@ -218,7 +218,7 @@ const tabsWithFilters: Record<string, string[]> = {
 for (const d of ISSUES) assert.ok(tabsWithFilters[d.tab]?.includes(d.filter), `issue ${d.label} points to a real filter`);
 const labels = [
   ...ISSUES.flatMap((d) => [d.label, d.fix, d.priority]),
-  ...[CODE_FILTERS, BROKEN_FILTERS, BAD_LINK_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
+  ...[CODE_FILTERS, BROKEN_FILTERS, CHANGE_FILTERS, BAD_LINK_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
       indexFilters([]), schemaFilters([]), ...CHECKS.map(metaFilters)].flat().map((f) => f.label),
 ];
 const untranslated = [...new Set(labels)].filter((l) => !hasTranslation(l) && !/^(\d|Tutt|Oltre|Sotto|Contenuto scarso \()/.test(l));
@@ -227,4 +227,38 @@ assert.equal(badLinkReason("href su <span>"), "href su <span>");
 assert.equal(badLinkReason("URL non valido: invalid IPv6 address"), "URL non valido: invalid IPv6 address");
 for (const r of ["href javascript:", "href su {tag}", "<a> senza href (onclick)", "navigazione JavaScript (onclick su {tag})"])
   assert.ok(hasTranslation(r), `crawler reason "${r}" has an English translation`);
+const snap = (pages: Page[]) => ({ pages, broken: [], images: [], hreflang: [], structured: [], bad_links: [] });
+const v1 = snap([
+  { ...base, url: "/", title: "Home page title long enough here" },
+  { ...base, url: "/old", title: "Old page with a fine long title" },
+  { ...base, url: "/moved", title: "Moving page with a long title here" },
+  { ...base, url: "/hidden", title: "Hidden later page with long title" },
+]);
+const v2 = snap([
+  { ...base, url: "/", title: "Home page title changed to be long" },
+  { ...base, url: "/moved", status: 301 },
+  { ...base, url: "/hidden", title: "Hidden later page with long title", meta_robots: "noindex" },
+  { ...base, url: "/new" },
+]);
+const changes = compareCrawls(v1, v2);
+const ofKind = (k: string) => changes.filter((c) => c.kind === k).map((c) => [c.key, c.before, c.after]);
+assert.deepEqual(ofKind("added"), [["/new", "", "200"]]);
+assert.deepEqual(ofKind("removed"), [["/old", "200", ""]]);
+assert.deepEqual(ofKind("status"), [["/moved", "200", "301"]]);
+assert.deepEqual(ofKind("indexability"), [["/moved", "Indicizzabile", "Redirect"], ["/hidden", "Indicizzabile", "Noindex"]]);
+assert.deepEqual(ofKind("title").map((c) => c[0]), ["/", "/moved"]);
+assert.deepEqual(
+  ofKind("issue"),
+  [
+    ["Meta description mancante", "4", "2"], // 4 indexable pages before, 2 after
+    ["H1 mancante", "4", "2"],
+    ["Canonical mancante", "4", "2"],
+    ["Pagine indicizzabili non nella sitemap", "4", "2"],
+    ["Title mancante", "0", "1"],
+    ["Redirect (3xx)", "0", "1"],
+  ],
+  "only issues whose count moved",
+);
+assert.equal(pick(changes.map((c) => ({ ...c, url: c.key })), CHANGE_FILTERS, "content").length, 2);
+assert.equal(allIssues(v2).find((i) => i.label === "Title mancante")?.count, 1);
 console.log("pages.check: ok");

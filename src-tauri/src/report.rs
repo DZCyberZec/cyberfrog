@@ -270,3 +270,29 @@ pub fn read_structured(path: &Path) -> rusqlite::Result<Vec<StructuredRow>> {
         })?
         .collect()
 }
+
+/// A link on a crawled page that crawlers can't follow, or an href that isn't a valid URL.
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct BadLinkRow {
+    pub page: String,
+    pub kind: String,
+    pub raw: String,
+    pub reason: String,
+}
+
+pub fn read_bad_links(path: &Path) -> rusqlite::Result<Vec<BadLinkRow>> {
+    let db = open_existing(path)?;
+    if !compiles(&db, "SELECT 1 FROM bad_links LIMIT 0") {
+        return Ok(Vec::new());
+    }
+    db.prepare("SELECT page, kind, raw, reason FROM bad_links ORDER BY page, rowid")?
+        .query_map([], |r| {
+            Ok(BadLinkRow {
+                page: r.get(0)?,
+                kind: r.get(1)?,
+                raw: r.get(2)?,
+                reason: r.get(3)?,
+            })
+        })?
+        .collect()
+}

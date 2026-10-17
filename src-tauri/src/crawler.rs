@@ -107,6 +107,18 @@ struct HtmlData {
     /// `<link rel="alternate" hreflang>` annotations: (language code as written, target).
     hreflang: Vec<(String, Url)>,
     structured: Vec<Structured>,
+    /// Links Google can't follow, or hrefs that aren't valid URLs.
+    bad_links: Vec<BadLink>,
+}
+
+/// A link a crawler can't follow: JavaScript navigation, href outside `<a>`, or an invalid URL.
+#[derive(Debug, PartialEq)]
+struct BadLink {
+    /// "uncrawlable" or "invalid".
+    kind: &'static str,
+    /// The href or onclick as written, shortened.
+    raw: String,
+    reason: String,
 }
 
 /// One structured-data item: a schema.org type found on the page, or a block that failed to parse.
@@ -300,6 +312,12 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              PRIMARY KEY (source, target)
          ) WITHOUT ROWID;
          CREATE INDEX IF NOT EXISTS links_target ON links (target);
+         CREATE TABLE IF NOT EXISTS bad_links (
+             page   TEXT NOT NULL,
+             kind   TEXT NOT NULL,
+             raw    TEXT NOT NULL,
+             reason TEXT NOT NULL
+         );
          CREATE TABLE IF NOT EXISTS structured (
              page   TEXT NOT NULL,
              format TEXT NOT NULL,
@@ -498,6 +516,12 @@ pub async fn crawl(
                     link.anchor,
                     false
                 ])?;
+            }
+            let mut insert_bad = tx.prepare_cached(
+                "INSERT INTO bad_links (page, kind, raw, reason) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            for b in &html.bad_links {
+                insert_bad.execute(params![page.url.as_str(), b.kind, b.raw, b.reason])?;
             }
             let mut insert_structured = tx.prepare_cached(
                 "INSERT INTO structured (page, format, kind, issue) VALUES (?1, ?2, ?3, ?4)",
@@ -901,6 +925,66 @@ fn selector(css: &str) -> Selector {
 }
 
 static ANCHORS: LazyLock<Selector> = LazyLock::new(|| selector("a[href]"));
+static OTHER_HREF: LazyLock<Selector> =
+    LazyLock::new(|| selector("[href]:not(a):not(link):not(base):not(area)"));
+static ONCLICK: LazyLock<Selector> = LazyLock::new(|| selector("[onclick]"));
+static JS_NAVIGATION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)location(\.href)?\s*=|location\.(assign|replace)\s*\(|window\.open\s*\(")
+        .expect("static regex")
+});
+
+/// Links Google's guidance says it may not follow (only `<a href="URL">` is reliable), and hrefs
+/// that don't parse as URLs. Crawling skips both; this records them.
+fn bad_links(doc: &Html, base: &Url) -> Vec<BadLink> {
+    let short = |s: &str| s.trim().chars().take(200).collect::<String>();
+    let mut out = Vec::new();
+    for a in doc.select(&ANCHORS) {
+        let href = a.value().attr("href").unwrap_or_default();
+        if href
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("javascript:")
+        {
+            out.push(BadLink {
+                kind: "uncrawlable",
+                raw: short(href),
+                reason: "href javascript:".into(),
+            });
+        } else if let Err(e) = base.join(href.trim()) {
+            out.push(BadLink {
+                kind: "invalid",
+                raw: short(href),
+                reason: format!("URL non valido: {e}"),
+            });
+        }
+    }
+    for el in doc.select(&OTHER_HREF) {
+        let href = el.value().attr("href").unwrap_or_default();
+        out.push(BadLink {
+            kind: "uncrawlable",
+            raw: short(href),
+            reason: format!("href su <{}>", el.value().name()),
+        });
+    }
+    for el in doc.select(&ONCLICK) {
+        let onclick = el.value().attr("onclick").unwrap_or_default();
+        if !JS_NAVIGATION.is_match(onclick) {
+            continue;
+        }
+        let e = el.value();
+        let reason = if e.name() == "a" && e.attr("href").is_none() {
+            "<a> senza href (onclick)".to_owned()
+        } else {
+            format!("navigazione JavaScript (onclick su <{}>)", e.name())
+        };
+        out.push(BadLink {
+            kind: "uncrawlable",
+            raw: short(onclick),
+            reason,
+        });
+    }
+    out
+}
 static TITLE: LazyLock<Selector> = LazyLock::new(|| selector("title"));
 static H1: LazyLock<Selector> = LazyLock::new(|| selector("h1"));
 static META: LazyLock<Selector> = LazyLock::new(|| selector("meta[name][content]"));
@@ -1074,6 +1158,7 @@ fn parse_html(base: &Url, html: &str) -> HtmlData {
             })
             .collect(),
         structured: structured_data(&doc),
+        bad_links: bad_links(&doc, base),
         // shortcut: <head> annotations only, not the HTTP Link header or sitemap xhtml:link variants
         hreflang: doc
             .select(&LINK_REL)
@@ -1563,6 +1648,47 @@ mod tests {
             bits(&a, &different) > 16,
             "unrelated text is far apart: {}",
             bits(&a, &different)
+        );
+    }
+
+    #[test]
+    fn finds_uncrawlable_and_invalid_links() {
+        let base = Url::parse("https://site.test/").unwrap();
+        let html = r##"
+            <a href="/ok">fine</a><a href="mailto:x@y.z">mail</a><a href="tel:123">tel</a><a href="#top">top</a>
+            <a href=" JavaScript:void(0)">js</a>
+            <span href="/fake">not a link</span><link rel="stylesheet" href="/s.css"><area href="/map">
+            <button onclick="window.location.href='/next'">next</button>
+            <a onclick="location.assign('/go')">no href</a>
+            <div onclick="toggleMenu()">menu</div>
+            <a href="http://[broken">bad</a>"##;
+        let found: Vec<(&str, String, String)> = bad_links(&Html::parse_document(html), &base)
+            .into_iter()
+            .map(|b| (b.kind, b.raw, b.reason))
+            .collect();
+        assert_eq!(
+            found[0],
+            (
+                "uncrawlable",
+                "JavaScript:void(0)".into(),
+                "href javascript:".into()
+            )
+        );
+        assert_eq!(
+            (found[1].0, found[1].1.as_str()),
+            ("invalid", "http://[broken")
+        );
+        assert!(found[1].2.starts_with("URL non valido"));
+        assert_eq!(
+            found[2],
+            ("uncrawlable", "/fake".into(), "href su <span>".into())
+        );
+        assert_eq!(found[3].2, "navigazione JavaScript (onclick su <button>)");
+        assert_eq!(found[4].2, "<a> senza href (onclick)");
+        assert_eq!(
+            found.len(),
+            5,
+            "plain links, mailto/tel, <link>, <area> and non-navigating onclick are fine"
         );
     }
 

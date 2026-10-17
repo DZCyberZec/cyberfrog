@@ -27,6 +27,9 @@ import {
   dupPages,
   ISSUES,
   countIssues,
+  BAD_LINK_FILTERS,
+  badLinkReason,
+  type BadLinkRow,
   type Issue,
   type Reports,
   buildSitemapXml,
@@ -246,6 +249,18 @@ const issueColumns = iss.columns([
   iss.accessor("fix", { header: tr("Cosa fare"), size: 520 }),
 ]);
 
+const bad = helperFor<BadLinkRow>();
+const badLinkColumns = bad.columns([
+  bad.accessor("page", { header: tr("Pagina"), size: 400 }),
+  bad.accessor("raw", { header: tr("Link"), size: 340 }),
+  bad.accessor((b) => badLinkReason(b.reason), { id: "reason", header: tr("Motivo"), size: 320 }),
+  bad.accessor((b) => (b.kind === "invalid" ? tr("URL non validi") : tr("Non scansionabili")), {
+    id: "kind",
+    header: tr("Tipo"),
+    size: 150,
+  }),
+]);
+
 const meta = helperFor<MetaRow>();
 const metaTabs = CHECKS.map((check) => ({
   check,
@@ -265,6 +280,7 @@ type Tab =
   | "index"
   | "external"
   | "broken"
+  | "badlinks"
   | "images"
   | "sitemap"
   | "perf"
@@ -279,6 +295,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "index", label: tr("Indicizzabilità") },
   { id: "external", label: tr("Link esterni") },
   { id: "broken", label: tr("Link rotti") },
+  { id: "badlinks", label: tr("Link non scansionabili") },
   { id: "images", label: tr("Immagini") },
   { id: "sitemap", label: tr("Sitemap") },
   { id: "perf", label: tr("Prestazioni") },
@@ -300,6 +317,7 @@ type CrawlData = {
   images: ImageRow[];
   hreflang: HreflangRow[];
   structured: StructuredRow[];
+  bad_links: BadLinkRow[];
 };
 type CrawlSummary = { path: string; start_url: string | null; pages: number; modified_ms: number };
 type Progress = { stage: "pages" | "external" | "images"; done: number; pending: number };
@@ -320,6 +338,7 @@ export default function App() {
   const [images, setImages] = useState<ImageRow[]>([]);
   const [hreflang, setHreflang] = useState<HreflangRow[]>([]);
   const [structured, setStructured] = useState<StructuredRow[]>([]);
+  const [badLinks, setBadLinks] = useState<BadLinkRow[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [crawlPath, setCrawlPath] = useState<string | null>(null);
   const [recent, setRecent] = useState<CrawlSummary[]>([]);
@@ -352,6 +371,7 @@ export default function App() {
     setImages(data.images);
     setHreflang(data.hreflang);
     setStructured(data.structured);
+    setBadLinks(data.bad_links);
     setSelected(null);
     setSelectedImage(null);
     setCrawlPath(data.path);
@@ -449,6 +469,7 @@ export default function App() {
       codes: { rows: pages, filters: CODE_FILTERS },
       index: { rows: pages, filters: indexTabFilters },
       broken: { rows: broken, filters: BROKEN_FILTERS },
+      badlinks: { rows: badLinks, filters: BAD_LINK_FILTERS },
       images: { rows: images, filters: IMAGE_FILTERS },
       sitemap: { rows: pages, filters: SITEMAP_FILTERS },
       perf: { rows: pages, filters: PERF_FILTERS },
@@ -458,7 +479,7 @@ export default function App() {
       ...Object.fromEntries(metaTabs.map((m) => [m.check.field, { rows: metaRows(pages, m.check.field), filters: m.filters }])),
     };
     return countIssues(ISSUES, reports);
-  }, [pages, indexTabFilters, broken, images, hreflangRows, schemaRows, schemaTabFilters, dupRows]);
+  }, [pages, indexTabFilters, broken, badLinks, images, hreflangRows, schemaRows, schemaTabFilters, dupRows]);
   const highIssues = issues.filter((i) => i.priority === "Alta").length;
   const host = pages[0] ? new URL(pages[0].url).hostname : "crawl";
   const statusText = running
@@ -695,6 +716,18 @@ export default function App() {
                 filters={metaTab.filters}
                 exportName={`${host}-${tab.replace("_", "-")}`}
                 {...selectByUrl}
+              />
+            )}
+            {tab === "badlinks" && (
+              <DataTable
+                key={`badlinks-${jump.seq}`}
+                initialFilter={jump.tab === "badlinks" ? (jump.filter ?? undefined) : undefined}
+                data={badLinks}
+                columns={badLinkColumns}
+                filters={BAD_LINK_FILTERS}
+                exportName={`${host}-link-non-scansionabili`}
+                onRowClick={(b) => setSelected(b.page)}
+                isSelected={(b) => b.page === selected}
               />
             )}
             {tab === "sitemap" && (

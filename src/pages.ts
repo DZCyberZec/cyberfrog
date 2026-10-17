@@ -514,6 +514,8 @@ export const ISSUES: IssueDef[] = [
   { tab: "meta_description", filter: "missing", priority: "Media", label: tr("Meta description mancante"), fix: tr("Aggiungi una descrizione che inviti al clic.") },
   { tab: "meta_description", filter: "duplicate", priority: "Media", label: tr("Meta description duplicate"), fix: tr("Scrivi descrizioni diverse per pagine diverse.") },
   { tab: "h1", filter: "missing", priority: "Media", label: tr("H1 mancante"), fix: tr("Aggiungi un H1 con l'argomento principale della pagina.") },
+  { tab: "badlinks", filter: "uncrawlable", priority: "Media", label: tr("Link non scansionabili"), fix: tr("Usa <a href=\"URL\"> per i link: Google non segue la navigazione in JavaScript né gli href su altri elementi.") },
+  { tab: "badlinks", filter: "invalid", priority: "Media", label: tr("Link con URL non validi"), fix: tr("Correggi la sintassi degli URL nei link.") },
   { tab: "broken", filter: "external", priority: "Media", label: tr("Link esterni rotti"), fix: tr("Aggiorna o rimuovi i link verso siti che non rispondono più.") },
   { tab: "images", filter: "large", priority: "Media", label: tr("Immagini oltre 100 KB"), fix: tr("Comprimi o converti in WebP/AVIF per velocizzare le pagine.") },
   { tab: "images", filter: "missing-alt", priority: "Media", label: tr("Immagini senza alt"), fix: tr("Aggiungi un testo alternativo descrittivo (o alt=\"\" se decorativa).") },
@@ -555,4 +557,20 @@ export function countIssues(defs: IssueDef[], reports: Reports): Issue[] {
       return count > 0 ? [{ ...d, count }] : [];
     })
     .sort((a, b) => RANK[a.priority] - RANK[b.priority] || b.count - a.count);
+}
+
+/** Mirrors `report::BadLinkRow`. */
+export type BadLinkRow = { page: string; kind: "uncrawlable" | "invalid"; raw: string; reason: string };
+
+export const BAD_LINK_FILTERS: FilterDef<BadLinkRow>[] = [
+  { id: "all", label: tr("Tutti"), test: () => true },
+  { id: "uncrawlable", label: tr("Non scansionabili"), test: (b) => b.kind === "uncrawlable" },
+  { id: "invalid", label: tr("URL non validi"), test: (b) => b.kind === "invalid" },
+];
+
+/** Reasons are stored in Italian by the crawler; "<tag>" parts are kept as they are. */
+export function badLinkReason(reason: string): string {
+  const tag = /<[a-z0-9-]+>/i.exec(reason)?.[0] ?? "";
+  if (reason.startsWith("URL non valido")) return tr("URL non valido") + reason.slice("URL non valido".length);
+  return tr(reason.replace(tag, "{tag}"), { tag });
 }

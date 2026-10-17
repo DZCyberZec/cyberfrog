@@ -284,6 +284,20 @@ const EN: Record<string, string> = {
   'Indica la versione predefinita con hreflang="x-default".': 'Mark the default version with hreflang="x-default".',
   "URL bloccati da robots.txt": "URLs blocked by robots.txt",
   "Verifica che il blocco sia voluto.": "Check that the block is intended.",
+  // uncrawlable links
+  "Link non scansionabili": "Uncrawlable links",
+  "Non scansionabili": "Uncrawlable",
+  "URL non validi": "Invalid URLs",
+  "URL non valido": "Invalid URL",
+  "Link con URL non validi": "Links with invalid URLs",
+  'Usa <a href="URL"> per i link: Google non segue la navigazione in JavaScript né gli href su altri elementi.':
+    'Use <a href="URL"> for links: Google doesn\'t follow JavaScript navigation or hrefs on other elements.',
+  "Correggi la sintassi degli URL nei link.": "Fix the URL syntax in the links.",
+  "href javascript:": "javascript: href",
+  "href su {tag}": "href on {tag}",
+  "<a> senza href (onclick)": "<a> without href (onclick)",
+  "navigazione JavaScript (onclick su {tag})": "JavaScript navigation (onclick on {tag})",
+  "Link": "Link",
   // settings
   "Impostazioni crawl": "Crawl settings",
   Limiti: "Limits",

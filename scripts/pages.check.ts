@@ -5,7 +5,7 @@ import type { Page } from "../src/pages.ts";
 // expected labels below are Italian, the source language; pin it before the modules load
 Object.defineProperty(globalThis, "navigator", { value: { language: "it-IT" }, configurable: true });
 const {
-  BROKEN_FILTERS, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
+  BROKEN_FILTERS, BAD_LINK_FILTERS, badLinkReason, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
 } = await import("../src/pages.ts");
 const { hasTranslation } = await import("../src/i18n.ts");
 
@@ -213,14 +213,18 @@ const tabsWithFilters: Record<string, string[]> = {
   title: metaFilters(CHECKS[0]).map((f) => f.id), meta_description: metaFilters(CHECKS[1]).map((f) => f.id),
   h1: metaFilters(CHECKS[2]).map((f) => f.id), images: IMAGE_FILTERS.map((f) => f.id), perf: PERF_FILTERS.map((f) => f.id),
   sitemap: SITEMAP_FILTERS.map((f) => f.id), schema: schemaFilters([]).map((f) => f.id), hreflang: HREFLANG_FILTERS.map((f) => f.id),
-  duplicates: DUP_FILTERS.map((f) => f.id),
+  duplicates: DUP_FILTERS.map((f) => f.id), badlinks: BAD_LINK_FILTERS.map((f) => f.id),
 };
 for (const d of ISSUES) assert.ok(tabsWithFilters[d.tab]?.includes(d.filter), `issue ${d.label} points to a real filter`);
 const labels = [
   ...ISSUES.flatMap((d) => [d.label, d.fix, d.priority]),
-  ...[CODE_FILTERS, BROKEN_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
+  ...[CODE_FILTERS, BROKEN_FILTERS, BAD_LINK_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
       indexFilters([]), schemaFilters([]), ...CHECKS.map(metaFilters)].flat().map((f) => f.label),
 ];
 const untranslated = [...new Set(labels)].filter((l) => !hasTranslation(l) && !/^(\d|Tutt|Oltre|Sotto|Contenuto scarso \()/.test(l));
 assert.deepEqual(untranslated, [], "every issue and filter label has an English translation");
+assert.equal(badLinkReason("href su <span>"), "href su <span>");
+assert.equal(badLinkReason("URL non valido: invalid IPv6 address"), "URL non valido: invalid IPv6 address");
+for (const r of ["href javascript:", "href su {tag}", "<a> senza href (onclick)", "navigazione JavaScript (onclick su {tag})"])
+  assert.ok(hasTranslation(r), `crawler reason "${r}" has an English translation`);
 console.log("pages.check: ok");

@@ -12,7 +12,9 @@ use tauri::ipc::Channel;
 use url::Url;
 
 use crawler::{Config, Page, Progress};
-use report::{BrokenLink, ExternalLink, HreflangRow, ImageRow, ImageUse, PageLinks, StructuredRow};
+use report::{
+    BadLinkRow, BrokenLink, ExternalLink, HreflangRow, ImageRow, ImageUse, PageLinks, StructuredRow,
+};
 
 const RECENT_LIMIT: usize = 15;
 const MAX_URLS_LIMIT: usize = 100_000;
@@ -71,6 +73,7 @@ struct CrawlData {
     images: Vec<ImageRow>,
     hreflang: Vec<HreflangRow>,
     structured: Vec<StructuredRow>,
+    bad_links: Vec<BadLinkRow>,
 }
 
 #[derive(serde::Serialize)]
@@ -102,6 +105,7 @@ fn load(path: &Path) -> Result<CrawlData, String> {
         images: report::read_images(path).map_err(unreadable)?,
         hreflang: report::read_hreflang(path).map_err(unreadable)?,
         structured: report::read_structured(path).map_err(unreadable)?,
+        bad_links: report::read_bad_links(path).map_err(unreadable)?,
     })
 }
 

@@ -339,6 +339,23 @@ const EN: Record<string, string> = {
   "Rimuovi regola": "Remove rule",
   "+ Aggiungi regola": "+ Add rule",
   "Regola {n}": "Rule {n}",
+  // redirect chains
+  Redirect: "Redirect",
+  Loop: "Loop",
+  "Catene (2+ redirect)": "Chains (2+ redirects)",
+  "Destinazione non 200": "Final URL not 200",
+  "Verso URL non scansionati": "To URLs not crawled",
+  "Loop di redirect": "Redirect loops",
+  "Interrompi il ciclo: ogni redirect deve arrivare a una pagina che risponde 200.":
+    "Break the loop: every redirect must end on a page that returns 200.",
+  "Catene di redirect": "Redirect chains",
+  "Fai puntare il primo URL direttamente alla destinazione finale.": "Point the first URL straight to the final destination.",
+  "Redirect verso URL non 200": "Redirects to non-200 URLs",
+  "Reindirizza verso una pagina che esiste e risponde 200.": "Redirect to a page that exists and returns 200.",
+  Hop: "Hops",
+  Catena: "Chain",
+  "Destinazione finale": "Final URL",
+  "Stato finale": "Final status",
   // settings
   "Impostazioni crawl": "Crawl settings",
   Limiti: "Limits",

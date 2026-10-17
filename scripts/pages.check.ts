@@ -6,6 +6,7 @@ import type { Page } from "../src/pages.ts";
 Object.defineProperty(globalThis, "navigator", { value: { language: "it-IT" }, configurable: true });
 const {
   BROKEN_FILTERS, customRows, customFilters, CHANGE_FILTERS, compareCrawls, allIssues, BAD_LINK_FILTERS, badLinkReason, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
+  REDIRECT_FILTERS, redirectChains,
 } = await import("../src/pages.ts");
 const { hasTranslation } = await import("../src/i18n.ts");
 
@@ -214,11 +215,12 @@ const tabsWithFilters: Record<string, string[]> = {
   h1: metaFilters(CHECKS[2]).map((f) => f.id), images: IMAGE_FILTERS.map((f) => f.id), perf: PERF_FILTERS.map((f) => f.id),
   sitemap: SITEMAP_FILTERS.map((f) => f.id), schema: schemaFilters([]).map((f) => f.id), hreflang: HREFLANG_FILTERS.map((f) => f.id),
   duplicates: DUP_FILTERS.map((f) => f.id), badlinks: BAD_LINK_FILTERS.map((f) => f.id),
+  redirects: REDIRECT_FILTERS.map((f) => f.id),
 };
 for (const d of ISSUES) assert.ok(tabsWithFilters[d.tab]?.includes(d.filter), `issue ${d.label} points to a real filter`);
 const labels = [
   ...ISSUES.flatMap((d) => [d.label, d.fix, d.priority]),
-  ...[CODE_FILTERS, BROKEN_FILTERS, CHANGE_FILTERS, BAD_LINK_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
+  ...[CODE_FILTERS, BROKEN_FILTERS, CHANGE_FILTERS, REDIRECT_FILTERS, BAD_LINK_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
       indexFilters([]), schemaFilters([]), ...CHECKS.map(metaFilters)].flat().map((f) => f.label),
 ];
 const untranslated = [...new Set(labels)].filter((l) => !hasTranslation(l) && !/^(\d|Tutt|Oltre|Sotto|Contenuto scarso \()/.test(l));
@@ -278,4 +280,21 @@ const cf = customFilters(cdata.rules);
 assert.deepEqual(cf.map((f) => f.label), ["Tutte", "Contiene: GTM", "Non contiene: GTM", "Con Autore", "Senza Autore"]);
 assert.deepEqual(pick(crows, cf, "no:GTM"), ["/b"]);
 assert.deepEqual(pick(crows, cf, "no:Autore"), ["/b"]);
+const rp: Page[] = [
+  { ...base, url: "/a", status: 301, redirect_to: "/b", inlinks: 3 },
+  { ...base, url: "/b", status: 302, redirect_to: "/c" },
+  { ...base, url: "/c" },
+  { ...base, url: "/x", status: 301, redirect_to: "/y" },
+  { ...base, url: "/y", status: 301, redirect_to: "/x" },
+  { ...base, url: "/gone", status: 301, redirect_to: "/404" },
+  { ...base, url: "/404", status: 404 },
+  { ...base, url: "/out", status: 301, redirect_to: "https://other.it/" },
+];
+const chains = redirectChains(rp);
+const a = chains.find((c) => c.url === "/a")!;
+assert.deepEqual([a.hops, a.chain.join(">"), a.finalStatus, a.inlinks], [2, "/a>/b>/c", "200", 3]);
+assert.deepEqual(pick(chains, REDIRECT_FILTERS, "chains"), ["/a"], "/b alone is a single redirect");
+assert.deepEqual(pick(chains, REDIRECT_FILTERS, "loops"), ["/x", "/y"]);
+assert.deepEqual(pick(chains, REDIRECT_FILTERS, "bad-final"), ["/gone"]);
+assert.deepEqual(pick(chains, REDIRECT_FILTERS, "leaves"), ["/out"]);
 console.log("pages.check: ok");

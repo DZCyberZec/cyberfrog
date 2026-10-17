@@ -35,6 +35,9 @@ import {
   badLinkReason,
   customFilters,
   customRows,
+  REDIRECT_FILTERS,
+  redirectChains,
+  type RedirectChain,
   type CustomData,
   type CustomRow,
   type BadLinkRow,
@@ -280,6 +283,24 @@ const changeColumns = chg.columns([
   chg.accessor("after", { header: tr("Dopo"), size: 300 }),
 ]);
 
+const rdr = helperFor<RedirectChain>();
+const redirectColumns = rdr.columns([
+  rdr.accessor("url", { header: "URL", size: 380 }),
+  rdr.accessor("hops", { header: tr("Hop"), size: 70, cell: (c) => num(c.getValue()) }),
+  rdr.accessor((r) => r.chain.join("  →  "), { id: "chain", header: tr("Catena"), size: 520 }),
+  rdr.accessor("final", { header: tr("Destinazione finale"), size: 360 }),
+  rdr.accessor("finalStatus", {
+    header: tr("Stato finale"),
+    size: 120,
+    cell: (c) => {
+      const r = c.row.original;
+      const kind = r.loop || r.finalStatus.startsWith("4") || r.finalStatus.startsWith("5") ? "client" : r.finalStatus === "200" ? "ok" : "blocked";
+      return c.getValue() ? <span className={`badge ${kind}`}>{c.getValue()}</span> : "";
+    },
+  }),
+  rdr.accessor("inlinks", { header: tr("Inlink"), size: 75, cell: (c) => num(c.getValue()) }),
+]);
+
 const bad = helperFor<BadLinkRow>();
 const badLinkColumns = bad.columns([
   bad.accessor("page", { header: tr("Pagina"), size: 400 }),
@@ -313,6 +334,7 @@ type Tab =
   | "external"
   | "broken"
   | "badlinks"
+  | "redirects"
   | "custom"
   | "images"
   | "sitemap"
@@ -326,6 +348,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "compare", label: tr("Confronto") },
   { id: "internal", label: tr("Interni") },
   { id: "codes", label: tr("Codici di risposta") },
+  { id: "redirects", label: tr("Redirect") },
   { id: "index", label: tr("Indicizzabilità") },
   { id: "external", label: tr("Link esterni") },
   { id: "broken", label: tr("Link rotti") },
@@ -542,6 +565,7 @@ export default function App() {
     [pages, broken, images, hreflang, structured, badLinks],
   );
   const issues = useMemo(() => allIssues(snapshot, dupRows), [snapshot, dupRows]);
+  const redirectRows = useMemo(() => redirectChains(pages), [pages]);
   const customTable = useMemo(() => {
     const cust = helperFor<CustomRow>();
     return {
@@ -838,6 +862,17 @@ export default function App() {
                   }
                 />
               ))}
+            {tab === "redirects" && (
+              <DataTable
+                key={`redirects-${jump.seq}`}
+                initialFilter={jump.tab === "redirects" ? (jump.filter ?? undefined) : undefined}
+                data={redirectRows}
+                columns={redirectColumns}
+                filters={REDIRECT_FILTERS}
+                exportName={`${host}-redirect`}
+                {...selectByUrl}
+              />
+            )}
             {tab === "custom" && (
               <DataTable
                 key={`custom-${crawlPath}-${jump.seq}`}

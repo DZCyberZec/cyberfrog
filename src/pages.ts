@@ -514,6 +514,9 @@ export const ISSUES: IssueDef[] = [
   { tab: "meta_description", filter: "missing", priority: "Media", label: tr("Meta description mancante"), fix: tr("Aggiungi una descrizione che inviti al clic.") },
   { tab: "meta_description", filter: "duplicate", priority: "Media", label: tr("Meta description duplicate"), fix: tr("Scrivi descrizioni diverse per pagine diverse.") },
   { tab: "h1", filter: "missing", priority: "Media", label: tr("H1 mancante"), fix: tr("Aggiungi un H1 con l'argomento principale della pagina.") },
+  { tab: "redirects", filter: "loops", priority: "Alta", label: tr("Loop di redirect"), fix: tr("Interrompi il ciclo: ogni redirect deve arrivare a una pagina che risponde 200.") },
+  { tab: "redirects", filter: "chains", priority: "Media", label: tr("Catene di redirect"), fix: tr("Fai puntare il primo URL direttamente alla destinazione finale.") },
+  { tab: "redirects", filter: "bad-final", priority: "Media", label: tr("Redirect verso URL non 200"), fix: tr("Reindirizza verso una pagina che esiste e risponde 200.") },
   { tab: "badlinks", filter: "uncrawlable", priority: "Media", label: tr("Link non scansionabili"), fix: tr("Usa <a href=\"URL\"> per i link: Google non segue la navigazione in JavaScript né gli href su altri elementi.") },
   { tab: "badlinks", filter: "invalid", priority: "Media", label: tr("Link con URL non validi"), fix: tr("Correggi la sintassi degli URL nei link.") },
   { tab: "broken", filter: "external", priority: "Media", label: tr("Link esterni rotti"), fix: tr("Aggiorna o rimuovi i link verso siti che non rispondono più.") },
@@ -593,6 +596,7 @@ export function allIssues(d: CrawlSnapshot, dups: DupPage[] = []): Issue[] {
     index: { rows: d.pages, filters: indexFilters(d.pages) },
     broken: { rows: d.broken, filters: BROKEN_FILTERS },
     badlinks: { rows: d.bad_links, filters: BAD_LINK_FILTERS },
+    redirects: { rows: redirectChains(d.pages), filters: REDIRECT_FILTERS },
     images: { rows: d.images, filters: IMAGE_FILTERS },
     sitemap: { rows: d.pages, filters: SITEMAP_FILTERS },
     perf: { rows: d.pages, filters: PERF_FILTERS },
@@ -697,3 +701,59 @@ export function customFilters(rules: CustomRuleRow[]): FilterDef<CustomRow>[] {
     }),
   ];
 }
+
+/** Where a redirecting URL ends up after following every hop. */
+export type RedirectChain = {
+  url: string;
+  /** Redirects followed: 1 is a plain redirect, 2+ is a chain. */
+  hops: number;
+  chain: string[];
+  final: string;
+  /** Status of the final URL, "Loop", or empty when the final URL wasn't crawled. */
+  finalStatus: string;
+  loop: boolean;
+  /** The chain leaves the crawl (another host, or a URL past the crawl limit). */
+  leaves: boolean;
+  inlinks: number;
+};
+
+export function redirectChains(pages: Page[]): RedirectChain[] {
+  const byUrl = new Map(pages.map((p) => [p.url, p]));
+  return pages
+    .filter((p) => statusKind(p) === "redirect" && p.redirect_to)
+    .map((start) => {
+      const chain = [start.url];
+      const seen = new Set(chain);
+      let current: Page | undefined = start;
+      let loop = false;
+      while (current && statusKind(current) === "redirect" && current.redirect_to) {
+        const next = current.redirect_to.split("#")[0];
+        chain.push(next);
+        if (seen.has(next)) {
+          loop = true;
+          break;
+        }
+        seen.add(next);
+        current = byUrl.get(next);
+      }
+      const leaves = !loop && current === undefined;
+      return {
+        url: start.url,
+        hops: chain.length - 1,
+        chain,
+        final: chain[chain.length - 1],
+        finalStatus: loop ? tr("Loop") : current ? statusLabel(current) : "",
+        loop,
+        leaves,
+        inlinks: start.inlinks,
+      };
+    });
+}
+
+export const REDIRECT_FILTERS: FilterDef<RedirectChain>[] = [
+  { id: "all", label: tr("Tutti"), test: () => true },
+  { id: "chains", label: tr("Catene (2+ redirect)"), test: (r) => r.hops >= 2 && !r.loop },
+  { id: "loops", label: tr("Loop"), test: (r) => r.loop },
+  { id: "bad-final", label: tr("Destinazione non 200"), test: (r) => !r.loop && !r.leaves && r.finalStatus !== "200" },
+  { id: "leaves", label: tr("Verso URL non scansionati"), test: (r) => r.leaves },
+];

@@ -260,6 +260,12 @@ async fn ai_complete(engine: String, system: String, prompt: String) -> Result<S
     ai::complete(&engine, &system, &prompt).await
 }
 
+/// Topics a competitor covers that you don't, and the reverse, from two crawl files.
+#[tauri::command]
+fn content_gap(mine: String, theirs: String) -> Result<topics::gap::ContentGap, String> {
+    topics::gap::content_gap(Path::new(&mine), Path::new(&theirs)).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn list_schedules() -> Vec<schedule::Schedule> {
     schedule::load()
@@ -340,6 +346,7 @@ pub fn run() {
             list_crawls,
             find_browser,
             list_schedules,
+            content_gap,
             add_schedule,
             remove_schedule,
             ai_status,

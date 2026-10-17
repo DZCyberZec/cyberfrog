@@ -374,3 +374,51 @@ export const HREFLANG_FILTERS: FilterDef<HreflangPage>[] = [
   { id: "no-self", label: "Senza auto-riferimento", test: (h) => !h.selfRef },
   { id: "no-x-default", label: "Senza x-default", test: (h) => !h.xDefault },
 ];
+
+/** Mirrors `report::StructuredRow`: a schema.org type on a page, or a block that failed to parse. */
+export type StructuredRow = { page: string; format: string; kind: string | null; issue: string | null };
+
+/** Structured data of one HTML page, summarised. */
+export type SchemaPage = {
+  url: string;
+  types: string[];
+  formats: string;
+  /** Blocks that could not be parsed. */
+  errors: number;
+  /** Items lacking properties Google requires. */
+  warnings: number;
+  issues: string;
+};
+
+/** Every 200 HTML page, with or without structured data. */
+export function schemaPages(pages: Page[], rows: StructuredRow[]): SchemaPage[] {
+  const byPage = new Map<string, StructuredRow[]>();
+  for (const r of rows) byPage.set(r.page, [...(byPage.get(r.page) ?? []), r]);
+  return pages.filter(isHtmlPage).map((p) => {
+    const items = byPage.get(p.url) ?? [];
+    const kinds = items.flatMap((i) => (i.kind ? [i.kind] : []));
+    return {
+      url: p.url,
+      types: [...new Set(kinds)],
+      formats: [...new Set(items.map((i) => i.format))].join(", "),
+      errors: items.filter((i) => i.kind === null).length,
+      warnings: items.filter((i) => i.kind !== null && i.issue !== null).length,
+      issues: items.flatMap((i) => (i.issue ? [i.kind ? `${i.kind}: ${i.issue}` : i.issue] : [])).join(" · "),
+    };
+  });
+}
+
+/** Fixed filters plus one per type, most common first (at most 8). */
+export function schemaFilters(rows: SchemaPage[]): FilterDef<SchemaPage>[] {
+  const freq = new Map<string, number>();
+  for (const r of rows) for (const t of r.types) freq.set(t, (freq.get(t) ?? 0) + 1);
+  const top = [...freq].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 8);
+  return [
+    { id: "all", label: "Tutte", test: () => true },
+    { id: "with", label: "Con dati strutturati", test: (r) => r.types.length > 0 },
+    { id: "without", label: "Senza dati strutturati", test: (r) => r.types.length === 0 && r.errors === 0 },
+    { id: "errors", label: "JSON non valido", test: (r) => r.errors > 0 },
+    { id: "warnings", label: "Proprietà mancanti", test: (r) => r.warnings > 0 },
+    ...top.map(([t]) => ({ id: `type:${t}`, label: t, test: (r: SchemaPage) => r.types.includes(t) })),
+  ];
+}

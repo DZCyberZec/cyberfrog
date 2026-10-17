@@ -98,6 +98,17 @@ struct HtmlData {
     images: Vec<Image>,
     /// `<link rel="alternate" hreflang>` annotations: (language code as written, target).
     hreflang: Vec<(String, Url)>,
+    structured: Vec<Structured>,
+}
+
+/// One structured-data item: a schema.org type found on the page, or a block that failed to parse.
+#[derive(Debug, PartialEq)]
+struct Structured {
+    format: &'static str,
+    /// Short type name ("Product"), or `None` for a block that could not be read.
+    kind: Option<String>,
+    /// Parse error, or required properties Google expects but the item lacks.
+    issue: Option<String>,
 }
 
 /// An `<img src>` found in a page.
@@ -272,6 +283,13 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              PRIMARY KEY (source, target)
          ) WITHOUT ROWID;
          CREATE INDEX IF NOT EXISTS links_target ON links (target);
+         CREATE TABLE IF NOT EXISTS structured (
+             page   TEXT NOT NULL,
+             format TEXT NOT NULL,
+             kind   TEXT,
+             issue  TEXT
+         );
+         CREATE INDEX IF NOT EXISTS structured_page ON structured (page);
          CREATE TABLE IF NOT EXISTS hreflang (
              page TEXT NOT NULL,
              lang TEXT NOT NULL,
@@ -457,6 +475,17 @@ pub async fn crawl(
                     link.url.as_str(),
                     link.anchor,
                     false
+                ])?;
+            }
+            let mut insert_structured = tx.prepare_cached(
+                "INSERT INTO structured (page, format, kind, issue) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            for item in &html.structured {
+                insert_structured.execute(params![
+                    page.url.as_str(),
+                    item.format,
+                    item.kind,
+                    item.issue
                 ])?;
             }
             let mut insert_hreflang = tx.prepare_cached(
@@ -869,6 +898,125 @@ static LINK_REL: LazyLock<Selector> = LazyLock::new(|| selector("link[rel][href]
 static BODY: LazyLock<Selector> = LazyLock::new(|| selector("body"));
 static IMG_ALT: LazyLock<Selector> = LazyLock::new(|| selector("img[alt]"));
 static IMG: LazyLock<Selector> = LazyLock::new(|| selector("img[src]"));
+static SCRIPTS: LazyLock<Selector> = LazyLock::new(|| selector("script[type]"));
+static ITEMS: LazyLock<Selector> = LazyLock::new(|| selector("[itemscope][itemtype]"));
+
+/// Properties Google requires for a rich result, for the types most sites use.
+// shortcut: a hand-picked subset of Google's documented requirements, not full validation
+const REQUIRED: &[(&str, &[&str])] = &[
+    ("Product", &["name"]),
+    ("FAQPage", &["mainEntity"]),
+    ("BreadcrumbList", &["itemListElement"]),
+    ("LocalBusiness", &["name", "address"]),
+    ("Event", &["name", "startDate", "location"]),
+    ("Recipe", &["name", "image"]),
+    (
+        "JobPosting",
+        &[
+            "title",
+            "datePosted",
+            "description",
+            "hiringOrganization",
+            "jobLocation",
+        ],
+    ),
+];
+
+/// "Product" from "Product", "schema:Product" or "https://schema.org/Product".
+fn short_type(t: &str) -> String {
+    t.trim()
+        .rsplit(['/', ':', '#'])
+        .next()
+        .unwrap_or(t)
+        .to_owned()
+}
+
+/// JSON-LD blocks and top-level microdata items of a page.
+fn structured_data(doc: &Html) -> Vec<Structured> {
+    let mut out = Vec::new();
+    let json_ld = doc.select(&SCRIPTS).filter(|s| {
+        s.value()
+            .attr("type")
+            .is_some_and(|t| t.trim().eq_ignore_ascii_case("application/ld+json"))
+    });
+    for script in json_ld {
+        let text: String = script.text().collect();
+        let value: serde_json::Value = match serde_json::from_str(text.trim()) {
+            Ok(v) => v,
+            Err(e) => {
+                out.push(Structured {
+                    format: "JSON-LD",
+                    kind: None,
+                    issue: Some(format!("JSON non valido: {e}")),
+                });
+                continue;
+            }
+        };
+        // a block is one item, an array of items, or an object whose @graph lists them
+        let items: Vec<&serde_json::Value> = match &value {
+            serde_json::Value::Array(all) => all.iter().collect(),
+            v => match v.get("@graph") {
+                Some(serde_json::Value::Array(graph)) => graph.iter().collect(),
+                _ => vec![v],
+            },
+        };
+        for item in items {
+            let types: Vec<String> = match item.get("@type") {
+                Some(serde_json::Value::String(t)) => vec![short_type(t)],
+                Some(serde_json::Value::Array(ts)) => ts
+                    .iter()
+                    .filter_map(|t| t.as_str())
+                    .map(short_type)
+                    .collect(),
+                _ => continue,
+            };
+            for kind in types {
+                let missing: Vec<&str> = REQUIRED
+                    .iter()
+                    .find(|(t, _)| *t == kind)
+                    .map(|(_, props)| {
+                        props
+                            .iter()
+                            .copied()
+                            .filter(|p| item.get(*p).is_none())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let issue =
+                    (!missing.is_empty()).then(|| format!("Mancano: {}", missing.join(", ")));
+                out.push(Structured {
+                    format: "JSON-LD",
+                    kind: Some(kind),
+                    issue,
+                });
+            }
+        }
+    }
+    // shortcut: microdata types only; their properties are not checked
+    for item in doc.select(&ITEMS) {
+        let nested = item.ancestors().any(|a| {
+            a.value()
+                .as_element()
+                .is_some_and(|e| e.attr("itemscope").is_some())
+        });
+        if nested {
+            continue;
+        }
+        for t in item
+            .value()
+            .attr("itemtype")
+            .unwrap_or_default()
+            .split_ascii_whitespace()
+        {
+            out.push(Structured {
+                format: "Microdata",
+                kind: Some(short_type(t)),
+                issue: None,
+            });
+        }
+    }
+    out
+}
 
 // shortcut: ignores <base href>, add it when a site needs it
 fn parse_html(base: &Url, html: &str) -> HtmlData {
@@ -911,6 +1059,7 @@ fn parse_html(base: &Url, html: &str) -> HtmlData {
                 Some(Link { url, anchor })
             })
             .collect(),
+        structured: structured_data(&doc),
         // shortcut: <head> annotations only, not the HTTP Link header or sitemap xhtml:link variants
         hreflang: doc
             .select(&LINK_REL)
@@ -1270,6 +1419,56 @@ mod tests {
                 url: Url::parse("https://site.test/other#frag").unwrap(),
                 anchor: Some("x".to_owned())
             }]
+        );
+    }
+
+    #[test]
+    fn reads_json_ld_and_top_level_microdata() {
+        let html = r#"
+            <script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","offers":{}}</script>
+            <script type=" Application/LD+JSON ">{"@graph":[{"@type":"Organization","name":"X"},
+                {"@type":["WebSite","schema:CreativeWork"]},{"name":"no type"}]}</script>
+            <script type="application/ld+json">[{"@type":"FAQPage","mainEntity":[]}]</script>
+            <script type="application/ld+json">{"@type": "Event",}</script>
+            <script type="text/javascript">{"@type":"Ignored"}</script>
+            <ol itemscope itemtype="https://schema.org/BreadcrumbList">
+              <li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">a</li>
+            </ol>"#;
+        let items: Vec<(&str, Option<String>, Option<String>)> =
+            structured_data(&Html::parse_document(html))
+                .into_iter()
+                .map(|i| (i.format, i.kind, i.issue))
+                .collect();
+        let some = |s: &str| Some(s.to_owned());
+        assert_eq!(items.len(), 7);
+        assert_eq!(
+            items[0],
+            ("JSON-LD", some("Product"), some("Mancano: name"))
+        );
+        assert_eq!(items[1], ("JSON-LD", some("Organization"), None));
+        assert_eq!(items[2], ("JSON-LD", some("WebSite"), None));
+        assert_eq!(
+            items[3],
+            ("JSON-LD", some("CreativeWork"), None),
+            "prefixed types are shortened"
+        );
+        assert_eq!(items[4], ("JSON-LD", some("FAQPage"), None));
+        assert_eq!(
+            (items[5].0, items[5].1.as_deref()),
+            ("JSON-LD", None),
+            "invalid JSON is reported"
+        );
+        assert!(
+            items[5]
+                .2
+                .as_deref()
+                .unwrap()
+                .starts_with("JSON non valido")
+        );
+        assert_eq!(
+            items[6],
+            ("Microdata", some("BreadcrumbList"), None),
+            "nested ListItem is not top-level"
         );
     }
 

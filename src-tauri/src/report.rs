@@ -244,3 +244,29 @@ pub fn read_hreflang(path: &Path) -> rusqlite::Result<Vec<HreflangRow>> {
         })?
         .collect()
 }
+
+/// One structured-data item found on a crawled page.
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct StructuredRow {
+    pub page: String,
+    pub format: String,
+    pub kind: Option<String>,
+    pub issue: Option<String>,
+}
+
+pub fn read_structured(path: &Path) -> rusqlite::Result<Vec<StructuredRow>> {
+    let db = open_existing(path)?;
+    if !compiles(&db, "SELECT 1 FROM structured LIMIT 0") {
+        return Ok(Vec::new());
+    }
+    db.prepare("SELECT page, format, kind, issue FROM structured ORDER BY page, rowid")?
+        .query_map([], |r| {
+            Ok(StructuredRow {
+                page: r.get(0)?,
+                format: r.get(1)?,
+                kind: r.get(2)?,
+                issue: r.get(3)?,
+            })
+        })?
+        .collect()
+}

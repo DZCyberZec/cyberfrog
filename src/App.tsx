@@ -18,6 +18,8 @@ import {
   HREFLANG_FILTERS,
   hreflangIssues,
   hreflangPages,
+  schemaFilters,
+  schemaPages,
   buildSitemapXml,
   medianMs,
   codeLabel,
@@ -35,6 +37,8 @@ import {
   type ExternalLink,
   type HreflangPage,
   type HreflangRow,
+  type SchemaPage,
+  type StructuredRow,
   type ImageRow,
   type MetaRow,
   type Page,
@@ -187,6 +191,18 @@ const hreflangColumns = hl.columns([
   }),
 ]);
 
+const sd = helperFor<SchemaPage>();
+const schemaColumns = sd.columns([
+  sd.accessor("url", { header: "URL", size: 420 }),
+  sd.accessor((r) => r.types.join(", "), { id: "types", header: "Tipi schema.org", size: 300 }),
+  sd.accessor("formats", { header: "Formato", size: 140 }),
+  sd.accessor("issues", {
+    header: "Problemi",
+    size: 400,
+    cell: (c) => (c.getValue() ? <span className="issue">{c.getValue()}</span> : ""),
+  }),
+]);
+
 const meta = helperFor<MetaRow>();
 const metaTabs = CHECKS.map((check) => ({
   check,
@@ -209,6 +225,7 @@ type Tab =
   | "sitemap"
   | "perf"
   | "hreflang"
+  | "schema"
   | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
   { id: "internal", label: "Interni" },
@@ -220,6 +237,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "sitemap", label: "Sitemap" },
   { id: "perf", label: "Prestazioni" },
   { id: "hreflang", label: "Hreflang" },
+  { id: "schema", label: "Dati strutturati" },
   ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
 ];
 
@@ -234,6 +252,7 @@ type CrawlData = {
   broken: BrokenLink[];
   images: ImageRow[];
   hreflang: HreflangRow[];
+  structured: StructuredRow[];
 };
 type CrawlSummary = { path: string; start_url: string | null; pages: number; modified_ms: number };
 type Progress = { stage: "pages" | "external" | "images"; done: number; pending: number };
@@ -253,6 +272,7 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [images, setImages] = useState<ImageRow[]>([]);
   const [hreflang, setHreflang] = useState<HreflangRow[]>([]);
+  const [structured, setStructured] = useState<StructuredRow[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [crawlPath, setCrawlPath] = useState<string | null>(null);
   const [recent, setRecent] = useState<CrawlSummary[]>([]);
@@ -276,6 +296,7 @@ export default function App() {
     setBroken(data.broken);
     setImages(data.images);
     setHreflang(data.hreflang);
+    setStructured(data.structured);
     setSelected(null);
     setSelectedImage(null);
     setCrawlPath(data.path);
@@ -351,6 +372,8 @@ export default function App() {
   }, [pages]);
 
   const hreflangRows = useMemo(() => hreflangPages(pages, hreflang), [pages, hreflang]);
+  const schemaRows = useMemo(() => schemaPages(pages, structured), [pages, structured]);
+  const schemaTabFilters = useMemo(() => schemaFilters(schemaRows), [schemaRows]);
   const median = useMemo(() => medianMs(pages), [pages]);
   const indexable = useMemo(() => pages.filter((p) => nonIndexableReason(p) === null).length, [pages]);
   const indexTabFilters = useMemo(() => indexFilters(pages), [pages]);
@@ -553,6 +576,16 @@ export default function App() {
                     Genera sitemap XML
                   </button>
                 }
+                {...selectByUrl}
+              />
+            )}
+            {tab === "schema" && (
+              <DataTable
+                key="schema"
+                data={schemaRows}
+                columns={schemaColumns}
+                filters={schemaTabFilters}
+                exportName={`${host}-dati-strutturati`}
                 {...selectByUrl}
               />
             )}

@@ -1,7 +1,7 @@
 // Self-check for filters and CSV export. Run: node scripts/pages.check.ts
 import assert from "node:assert/strict";
 import {
-  BROKEN_FILTERS, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
+  BROKEN_FILTERS, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
 } from "../src/pages.ts";
 
 const base: Page = {
@@ -147,4 +147,24 @@ const fr = hps.find((h) => h.url === "/fr")!;
 assert.equal(hreflangIssues(fr), "Manca l'auto-riferimento · Manca x-default");
 assert.deepEqual(pick(hps, HREFLANG_FILTERS, "no-self"), ["/fr"]);
 assert.deepEqual(pick(hps, HREFLANG_FILTERS, "no-x-default"), ["/en", "/fr"]);
+const sp: Page[] = [
+  { ...base, url: "/a" }, { ...base, url: "/b" }, { ...base, url: "/c" }, { ...base, url: "/img", content_type: "image/png" },
+];
+const sr = [
+  { page: "/a", format: "JSON-LD", kind: "Organization", issue: null },
+  { page: "/a", format: "JSON-LD", kind: "Product", issue: "Mancano: name" },
+  { page: "/a", format: "Microdata", kind: "Organization", issue: null },
+  { page: "/b", format: "JSON-LD", kind: null, issue: "JSON non valido: x" },
+  { page: "/b", format: "JSON-LD", kind: "Article", issue: null },
+];
+const sps = schemaPages(sp, sr);
+assert.deepEqual(sps.map((r) => r.url), ["/a", "/b", "/c"], "HTML 200 pages only, including those without data");
+assert.deepEqual(sps[0].types, ["Organization", "Product"]);
+assert.equal(sps[0].formats, "JSON-LD, Microdata");
+assert.equal(sps[0].issues, "Product: Mancano: name");
+const sf = schemaFilters(sps);
+assert.deepEqual(sf.map((f) => f.id).slice(5), ["type:Article", "type:Organization", "type:Product"]);
+assert.deepEqual(pick(sps, sf, "errors"), ["/b"]);
+assert.deepEqual(pick(sps, sf, "warnings"), ["/a"]);
+assert.deepEqual(pick(sps, sf, "without"), ["/c"]);
 console.log("pages.check: ok");

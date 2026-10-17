@@ -319,6 +319,14 @@ const EN: Record<string, string> = {
   "Nessuno: il competitor copre tutti i tuoi argomenti.": "None: the competitor covers all your topics.",
   "Dove il competitor è più approfondito": "Where the competitor goes deeper",
   "{m} parole contro {t} di {url}": "{m} words against {t} on {url}",
+  // client report
+  "Esporta report per il cliente…": "Export client report…",
+  "Report salvato in {path}: aprilo nel browser e stampalo in PDF.": "Report saved to {path}: open it in a browser and print it to PDF.",
+  "Report SEO e GEO": "SEO & GEO report",
+  "{n} tipi di problema trovati su {p} pagine": "{n} issue types found across {p} pages",
+  "Cosa sistemare": "What to fix",
+  "{c} cluster di argomenti, {k} coppie in cannibalizzazione, {l} link interni da aggiungere.": "{c} topic clusters, {k} cannibalizing pairs, {l} internal links to add.",
+  "Report generato con CyberFrog – Another SEO Tool": "Report made with CyberFrog – Another SEO Tool",
   // topics
   "Argomenti e link": "Topics & links",
   "Pagine in cannibalizzazione": "Cannibalizing pages",

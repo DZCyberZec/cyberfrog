@@ -14,6 +14,7 @@ const { systemPrompt, metaPrompt, explainPrompt, planPrompt } = await import("..
 const { healthScore } = await import("../src/health.ts");
 const { TOPIC_FILTERS, topicFindings, REASON_LABEL } = await import("../src/topics.ts");
 const { summarize, metricRows, competitorActions } = await import("../src/competitor.ts");
+const { buildClientReport, esc } = await import("../src/clientReport.ts");
 const { EMPTY_GEO, geoFilters, geoRows, botState, CITABILITY, PURPOSE_LABEL } = await import("../src/geo.ts");
 
 const base: Page = {
@@ -412,4 +413,14 @@ assert.equal(acts[0].priority, "Alta");
 assert.ok(acts[0].text.includes("robots.txt"), "a closed door to AI search comes first");
 assert.ok(acts.some((a) => a.area === "Contenuti" && a.text.includes("ads, google")));
 assert.ok(acts.some((a) => a.text.includes("autore e data")));
+assert.equal(esc(`<img src=x onerror="a">&'`), "&lt;img src=x onerror=&quot;a&quot;&gt;&amp;&#39;");
+const evil: Page = { ...base, url: "https://s.it/<script>alert(1)</script>", status: 200, content_type: "text/html" };
+const report = buildClientReport({
+  crawl: { path: "", pages: [evil], external: [], broken: [], images: [], hreflang: [], structured: [], bad_links: [], custom: { rules: [], values: [] }, geo: EMPTY_GEO,
+    topics: { clusters: [], cannibal: [{ a: evil.url, b: "https://s.it/b", similarity: 0.5, title_similarity: 0.7, shared: [] }], suggestions: [], analysed: 1 } },
+  host: "s.it", health: 90, citability: null, indexable: 1, htmlPages: 1, medianMs: null,
+  counts: { ok: 1, redirect: 0, client: 0, server: 0, blocked: 0, none: 0 }, issues: [], logo: "data:image/png;base64,AAAA", date: new Date(0),
+});
+assert.ok(!report.includes("<script>alert"), "crawled strings are escaped in the client report");
+assert.ok(report.includes("Powered by") && report.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
 console.log("pages.check: ok");

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import cyberzecShield from "./assets/cyberzec-shield.png";
 import cyberfrogLogo from "./assets/cyberfrog-logo.png";
 import { SettingsDialog } from "./SettingsDialog";
@@ -21,12 +21,24 @@ import { EMPTY_CRAWL, STAGE_LABEL, hostOf, type CrawlData, type CrawlSummary, ty
 import { useAnalysis } from "./useAnalysis";
 import { TABS, type Tab } from "./nav";
 import { buildSitemapXml, type CrawlSnapshot } from "./pages";
+import { buildClientReport } from "./clientReport";
 import { LANG, LOCALE, setLang, tr, trError } from "./i18n";
 import "./App.css";
 
 const SQLITE_FILTER = [{ name: "Crawl CyberFrog", extensions: ["sqlite"] }];
 const fmt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
 const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
+
+/** A bundled asset as a data: URI, so an exported file carries it inline. */
+async function dataUri(url: string): Promise<string> {
+  const blob = await (await fetch(url)).blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
 
 export default function App() {
   const [crawl, setCrawl] = useState<CrawlData>(EMPTY_CRAWL);
@@ -192,6 +204,20 @@ export default function App() {
   }
   const saveSitemap = () =>
     saveAs("sitemap.xml", [{ name: "Sitemap XML", extensions: ["xml"] }], (to) => invoke("write_text_file", { path: to, contents: buildSitemapXml(crawl.pages) }), "Sitemap salvata in {path}");
+  const exportReport = () => {
+    const date = new Date();
+    return saveAs(
+      `${a.host}-report-${date.toISOString().slice(0, 10)}.html`,
+      [{ name: "HTML", extensions: ["html"] }],
+      async (to) => {
+        const logo = await dataUri(cyberzecShield);
+        const html = buildClientReport({ crawl, host: a.host, health: a.health, citability: a.citability, indexable: a.indexable, htmlPages: a.htmlPages, medianMs: a.median, counts: a.counts, issues: a.issues, logo, date });
+        await invoke("write_text_file", { path: to, contents: html });
+        await revealItemInDir(to);
+      },
+      "Report salvato in {path}: aprilo nel browser e stampalo in PDF.",
+    );
+  };
   const saveCrawlAs = () => saveAs(`${a.host}.sqlite`, SQLITE_FILTER, (to) => invoke("save_crawl_as", { from: crawl.path, to }), "Crawl salvato in {path}");
   const switchLang = () => setLang(LANG === "it" ? "en" : "it");
   const otherLang = LANG === "it" ? "English" : "Italiano";
@@ -215,7 +241,12 @@ export default function App() {
   const actionCommands: Command[] = [
     { id: "new", group: tr("Azioni"), label: tr("Nuova scansione"), run: newCrawl },
     { id: "open", group: tr("Azioni"), label: tr("Apri crawl…"), run: () => openCrawl() },
-    ...(hasCrawl ? [{ id: "save", group: tr("Azioni"), label: tr("Salva crawl come…"), run: saveCrawlAs }] : []),
+    ...(hasCrawl
+      ? [
+          { id: "save", group: tr("Azioni"), label: tr("Salva crawl come…"), run: saveCrawlAs },
+          { id: "report", group: tr("Azioni"), label: tr("Esporta report per il cliente…"), run: exportReport },
+        ]
+      : []),
     { id: "schedule", group: tr("Azioni"), label: tr("Crawl pianificati…"), run: () => setDialog("schedules") },
     { id: "settings", group: tr("Azioni"), label: tr("Impostazioni"), run: () => setDialog("settings") },
     { id: "lang", group: tr("Azioni"), label: tr("Lingua: {lang}", { lang: otherLang }), run: switchLang },
@@ -268,6 +299,7 @@ export default function App() {
               { label: tr("Nuova scansione"), onSelect: newCrawl, disabled: running },
               { label: tr("Apri crawl…"), onSelect: () => openCrawl(), disabled: running },
               { label: tr("Salva crawl come…"), onSelect: saveCrawlAs, disabled: running || !hasCrawl },
+              { label: tr("Esporta report per il cliente…"), onSelect: exportReport, disabled: running || !hasCrawl },
               "separator",
               { label: tr("Crawl pianificati…"), onSelect: () => setDialog("schedules") },
               "separator",

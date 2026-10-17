@@ -46,9 +46,9 @@ docs/clean-room-map.md     funzionalità di riferimento
 
 **Compatibilità:** i crawl salvati con versioni precedenti restano apribili. Per le colonne nuove `read_pages` usa `newer(...)` e `report.rs` usa `compiles(...)`. Ogni colonna nuova deve seguire questo schema.
 
-## Dove siamo (v0.5.0, 2026-10-17)
+## Dove siamo (v0.6.0, 2026-10-17)
 
-App pubblicata: https://github.com/DZCyberZec/cyberfrog (Apache-2.0), ultima release [v0.5.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.5.0) con DMG per Apple silicon. Installata in `/Applications/CyberFrog.app`. 29 test Rust + `scripts/pages.check.ts`, clippy pulito.
+App pubblicata: https://github.com/DZCyberZec/cyberfrog (Apache-2.0), ultima release [v0.5.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.6.0) con DMG per Apple silicon. Installata in `/Applications/CyberFrog.app`. 33 test Rust + `scripts/pages.check.ts`, clippy pulito.
 
 ### Fatto
 
@@ -57,6 +57,7 @@ App pubblicata: https://github.com/DZCyberZec/cyberfrog (Apache-2.0), ultima rel
 | 0.1.0 | Crawl stesso host (robots.txt, redirect, concorrenza, Stop), SQLite per crawl, Interni / Codici di risposta / Title / Meta description / H1 con filtri, indicizzabilità (noindex, canonical, X-Robots-Tag), link esterni e rotti, pannello Inlink/Outlink, immagini (alt, dimensioni, peso), sitemap XML (lettura, orfane, generazione), impostazioni (limite, velocità, user agent, esclusioni), prestazioni, hreflang, dati strutturati, contenuti duplicati (hash + SimHash), tab Problemi con priorità, export CSV, interfaccia IT/EN, icona, branding "Powered by Daniele Zecca – CyberZec" |
 | 0.2.0 | Link non scansionabili, confronto tra crawl (automatico col precedente), server MCP `cyberfrog --mcp` |
 | 0.3.0 | Estrazione personalizzata e ricerca nel sorgente (CSS / regex / testo), catene di redirect, barra laterale a gruppi |
+| 0.6.0 | Report GEO "Visibilità nelle AI": 12 crawler AI e il loro accesso da robots.txt (ricerca / su richiesta / addestramento), llms.txt, Content-Signal, punteggio di citabilità 0–100 per pagina con 10 controlli, pagine invisibili ai crawler AI (JavaScript); 5 nuovi problemi. Codice in `src-tauri/src/geo/` (bots, llms, signals) e `src/geo.ts` + `src/GeoReport.tsx` |
 | 0.5.0 | Modalità lista (solo gli URL incollati, qualsiasi dominio, robots.txt per dominio), crawl pianificati (launchd + `cyberfrog --scheduled <id>`, notifica con le differenze dal giro precedente), assistente AI anche tramite Claude Code (abbonamento, nessun costo API), modulo `ai/` diviso in keychain/api/claude_code |
 | 0.4.0 | Link Score (PageRank interno 0–100), vista Struttura (profondità + albero cartelle), rendering JavaScript opzionale (Chrome/Chromium/Brave/Edge headless, report JavaScript), assistente AI con Claude (title/meta, spiegazione problemi, piano d'azione; chiave nel Portachiavi), limite URL che non scende più a 1 da solo, home con solo gli ultimi 5 crawl |
 
@@ -76,7 +77,7 @@ Dettagli tecnici utili:
 ## Roadmap (cosa manca)
 
 **Richieste dall'utente (2026-10-17), in quest'ordine:**
-1. Funzioni SEO e **GEO** (ottimizzazione per motori AI) nuove e innovative, con codice veloce e leggero.
+1. Funzioni SEO e **GEO**: fatto il pacchetto 1–4 (v0.6.0). Restano: cluster per argomento e cannibalizzazione, suggerimenti di link interni (calcolo locale, niente API).
 2. **Rifacimento UX**: l'interfaccia sembra complicata e da software vecchio.
 3. **Aggiornamento automatico** da GitHub Releases.
 4. **Sicurezza e modularità:** niente file monolitici. Da dividere: `crawler.rs` (~2700 righe) e `App.tsx` (~1200).

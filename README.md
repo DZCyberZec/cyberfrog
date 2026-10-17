@@ -36,6 +36,11 @@
 - **AI assistant**: Claude suggests titles and meta descriptions, explains a page's issues and writes a prioritised action plan for the whole crawl. It runs through your own [Claude Code](https://claude.com/code) (your Claude subscription, no API cost) or an Anthropic API key kept in the macOS Keychain. Page data is sent to Anthropic only when you ask.
 - **List mode**: paste a list of URLs (a migration plan, a spreadsheet column) and CyberFrog checks only those, on any site, plus where they redirect.
 - **Scheduled crawls**: every day or every week at a set time, even with the app closed. A macOS notification tells you what changed since the previous run (new and removed pages, status changes, new errors).
+- **GEO – AI visibility**: how ready the site is for AI answer engines (ChatGPT, Claude, Perplexity, AI Overviews):
+  - which of 12 AI crawlers robots.txt lets in, split into search, on-demand and training bots
+  - llms.txt presence and format, and Content-Signal preferences
+  - a 0–100 citability score per page: answer up front, question subheadings, lists and tables, facts, author, date, sources, structured data
+  - pages AI crawlers can't read because their content is built by JavaScript
 - **MCP server**: Claude and other assistants can run crawls and query the data (see below).
 - **Export and reuse**: CSV export of any view (Excel-friendly), crawls saved as single SQLite files you can save, reopen and query.
 - **English and Italian** interface.

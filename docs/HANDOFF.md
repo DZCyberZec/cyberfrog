@@ -80,7 +80,7 @@ docs/clean-room-map.md     funzionalità di riferimento
 ## Come lavorare (preferenze dell'utente)
 
 - Lavorare **in autonomia**: sviluppare, testare da soli, fare commit locale, passare alla funzione successiva senza chiedere "procedo?". Fermarsi solo per decisioni vere (push, servizi a pagamento, credenziali, logo, licenza).
-- Rispondere in **italiano**, in formato adatto all'ADHD: prima l'azione, passi numerati e brevi, stato sempre esplicito.
+- Rispondere in **italiano**: prima l'azione, passi numerati e brevi, stato sempre esplicito.
 - Codice minimo e completo (stile "ponytail"): niente astrazioni non richieste. I `shortcut:` nei commenti segnano limiti noti.
 
 ## Comandi

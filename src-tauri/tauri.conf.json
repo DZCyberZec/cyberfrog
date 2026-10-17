@@ -30,6 +30,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "copyright": "Copyright 2026 Daniele Zecca – CyberZec. Apache License 2.0.",
+    "category": "DeveloperTool",
+    "shortDescription": "Another SEO Tool"
   }
 }

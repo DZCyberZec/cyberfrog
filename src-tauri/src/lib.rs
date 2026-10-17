@@ -245,8 +245,8 @@ fn save_crawl_as(from: String, to: String) -> Result<(), String> {
 /// Most recent crawls in the app data dir, newest first; unreadable files are skipped.
 /// Which AI engines are usable: a stored API key, an installed Claude Code (never the key itself).
 #[tauri::command]
-fn ai_status() -> ai::Status {
-    ai::status()
+async fn ai_status() -> ai::Status {
+    ai::status().await
 }
 
 /// Stores the API key in the Keychain; an empty key removes it.

@@ -28,6 +28,20 @@ pub fn find() -> Option<PathBuf> {
     })
 }
 
+/// `claude auth status` reports `"loggedIn": true` when the CLI can answer; no tokens spent.
+pub async fn logged_in(bin: &Path) -> bool {
+    let run = tokio::process::Command::new(bin)
+        .args(["auth", "status"])
+        .stdin(Stdio::null())
+        .kill_on_drop(true)
+        .output();
+    match tokio::time::timeout(Duration::from_secs(10), run).await {
+        Ok(Ok(out)) => serde_json::from_slice::<serde_json::Value>(&out.stdout)
+            .is_ok_and(|v| v["loggedIn"] == true),
+        _ => false,
+    }
+}
+
 pub async fn complete(system: &str, prompt: &str) -> Result<String, String> {
     let bin = find().ok_or(
         "Claude Code non trovato: installalo da claude.com/code oppure usa una chiave API.",
@@ -35,40 +49,17 @@ pub async fn complete(system: &str, prompt: &str) -> Result<String, String> {
     complete_with(&bin, system, prompt, "").await
 }
 
-/// Marks where the source list starts in a web search answer; asked for in the system prompt.
-const SOURCES: &str = "SOURCES:";
-
 /// Answers `query` with web search as the only tool the CLI may use.
 pub async fn search(system: &str, query: &str) -> Result<super::SearchAnswer, String> {
     let bin = find().ok_or(
         "Claude Code non trovato: installalo da claude.com/code oppure usa una chiave API.",
     )?;
     let system = format!(
-        "{system}\nEnd with a line \"{SOURCES}\" followed by every source URL you used, one per line."
+        "{system}\nEnd with a line \"{}\" followed by every source URL you used, one per line.",
+        super::SOURCES
     );
     let text = complete_with(&bin, &system, query, "WebSearch").await?;
-    Ok(split_sources(&text))
-}
-
-/// The answer before the source list, and the http(s) URLs listed after it.
-fn split_sources(text: &str) -> super::SearchAnswer {
-    let (answer, list) = text.rsplit_once(SOURCES).unwrap_or((text, ""));
-    let mut cited: Vec<String> = Vec::new();
-    for word in list.split_whitespace() {
-        let url = word.trim_matches(|c: char| {
-            matches!(c, '-' | '*' | '<' | '>' | '(' | ')' | '[' | ']' | ',')
-        });
-        if (url.starts_with("https://") || url.starts_with("http://"))
-            && !cited.iter().any(|u| u == url)
-        {
-            cited.push(url.to_owned());
-        }
-    }
-    super::SearchAnswer {
-        answer: answer.trim().to_owned(),
-        results: cited.clone(),
-        cited,
-    }
+    Ok(super::split_sources(&text))
 }
 
 /// `tools` is the comma-separated list of built-in tools the CLI may use; empty means none.
@@ -153,16 +144,6 @@ fn parse(stdout: &[u8], stderr: &[u8]) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn splits_the_answer_from_its_sources() {
-        let a = split_sources(
-            "Ecco i migliori.\n\nSOURCES:\n- https://a.it/x\n- <https://b.it/>\n- not a url\n- https://a.it/x",
-        );
-        assert_eq!(a.answer, "Ecco i migliori.");
-        assert_eq!(a.cited, vec!["https://a.it/x", "https://b.it/"]);
-        assert_eq!(split_sources("niente fonti").cited, Vec::<String>::new());
-    }
 
     #[test]
     fn reads_results_and_explains_failures() {

@@ -15,7 +15,28 @@ export type Page = {
   word_count: number | null;
   inlinks: number;
   x_robots_tag: string | null;
+  outlinks: number;
+  external_outlinks: number;
 };
+
+/** Mirrors `report::ExternalLink`, `BrokenLink`, `LinkRow` and `PageLinks` in src-tauri/src/report.rs. */
+export type ExternalLink = {
+  url: string;
+  status: number | null;
+  content_type: string | null;
+  error: string | null;
+  inlinks: number;
+};
+export type BrokenLink = {
+  source: string;
+  target: string;
+  anchor: string | null;
+  status: number | null;
+  error: string | null;
+  external: boolean;
+};
+export type LinkRow = { url: string; anchor: string | null; status: number | null; external: boolean };
+export type PageLinks = { inlinks: LinkRow[]; outlinks: LinkRow[] };
 
 export type MetaField = "title" | "meta_description" | "h1";
 
@@ -35,12 +56,21 @@ export type FilterDef<T> = { id: string; label: string; test: (row: T) => boolea
 export type StatusKind = "ok" | "redirect" | "client" | "server" | "blocked" | "none";
 
 export function statusKind(p: Page): StatusKind {
-  if (p.blocked_by_robots) return "blocked";
-  if (p.status === null) return "none";
-  if (p.status >= 500) return "server";
-  if (p.status >= 400) return "client";
-  if (p.status >= 300) return "redirect";
+  return p.blocked_by_robots ? "blocked" : kindOf(p.status);
+}
+
+export function kindOf(status: number | null): StatusKind {
+  if (status === null) return "none";
+  if (status >= 500) return "server";
+  if (status >= 400) return "client";
+  if (status >= 300) return "redirect";
   return "ok";
+}
+
+/** Label for a bare status: the code, or why there is none. */
+export function codeLabel(status: number | null, error: string | null): string {
+  if (status !== null) return String(status);
+  return error ? `Nessuna risposta: ${error}` : "Nessuna risposta";
 }
 
 export function statusLabel(p: Page): string {
@@ -48,6 +78,26 @@ export function statusLabel(p: Page): string {
   if (p.status === null) return p.error ? `Nessuna risposta: ${p.error}` : "Nessuna risposta";
   return String(p.status);
 }
+
+/** Status filters for rows that carry only a status code (external and broken links). */
+export function statusFilters<T extends { status: number | null }>(): FilterDef<T>[] {
+  const is = (k: StatusKind) => (r: T) => kindOf(r.status) === k;
+  return [
+    { id: "all", label: "Tutti", test: () => true },
+    { id: "ok", label: "2xx Successo", test: is("ok") },
+    { id: "redirect", label: "3xx Redirect", test: is("redirect") },
+    { id: "client", label: "4xx Errore client", test: is("client") },
+    { id: "server", label: "5xx Errore server", test: is("server") },
+    { id: "none", label: "Nessuna risposta", test: is("none") },
+  ];
+}
+
+export const BROKEN_FILTERS: FilterDef<BrokenLink>[] = [
+  { id: "all", label: "Tutti", test: () => true },
+  { id: "internal", label: "Interni", test: (b) => !b.external },
+  { id: "external", label: "Esterni", test: (b) => b.external },
+  ...statusFilters<BrokenLink>().filter((f) => ["client", "server", "none"].includes(f.id)),
+];
 
 export const CODE_FILTERS: FilterDef<Page>[] = [
   { id: "all", label: "Tutti", test: () => true },

@@ -148,6 +148,28 @@ button { font: inherit; }
 .tabs button:hover { color: var(--text); }
 .tabs button[aria-selected="true"] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
 
+.tabs .count {
+  margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: var(--client); background: var(--client-bg); font-variant-numeric: tabular-nums;
+}
+
+/* Report area: main table on top, optional detail panel below */
+.workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.table-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.detail {
+  height: 40%; min-height: 180px; display: flex; flex-direction: column;
+  border-top: 2px solid var(--border-strong); background: var(--surface);
+}
+.detail-head { display: flex; align-items: center; gap: 12px; padding-right: 8px; border-bottom: 1px solid var(--border); }
+.detail-head .tabs { border-bottom: 0; }
+.detail-head .tabs .count { color: var(--muted); background: var(--sunken); }
+.detail-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.detail .close {
+  width: 28px; height: 28px; color: var(--muted); background: none; border: 0;
+  border-radius: var(--radius); cursor: pointer;
+}
+.detail .close:hover { color: var(--text); background: var(--sunken); }
+
 /* Filters + export */
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .filters button {
@@ -163,7 +185,7 @@ button { font: inherit; }
 .export-msg { color: var(--muted); }
 
 /* Table */
-.grid { flex: 1; overflow: auto; background: var(--surface); }
+.grid { flex: 1; min-height: 0; overflow: auto; background: var(--surface); }
 .grid table { border-collapse: collapse; table-layout: fixed; }
 .grid thead th {
   position: sticky; top: 0; z-index: 1; padding: 0; text-align: left;
@@ -181,6 +203,8 @@ button { font: inherit; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .grid tbody tr:hover td { background: var(--sunken); }
+.grid tbody tr.clickable { cursor: pointer; }
+.grid tbody tr.selected td, .grid tbody tr.selected:hover td { background: var(--accent-soft); }
 .num { display: block; text-align: right; font-variant-numeric: tabular-nums; }
 .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
 

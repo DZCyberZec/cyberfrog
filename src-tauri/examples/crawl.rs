@@ -15,6 +15,7 @@ async fn main() -> cyberfrog_lib::crawler::CrawlResult<()> {
             start,
             concurrency: 8,
             max_urls: 10_000,
+            check_external: true,
         },
         &out,
         |p| eprint!("\r{} URL, {} in coda   ", p.done, p.pending),

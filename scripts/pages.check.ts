@@ -1,13 +1,13 @@
 // Self-check for filters and CSV export. Run: node scripts/pages.check.ts
 import assert from "node:assert/strict";
 import {
-  CHECKS, CODE_FILTERS, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
+  BROKEN_FILTERS, CHECKS, CODE_FILTERS, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
 } from "../src/pages.ts";
 
 const base: Page = {
   url: "", depth: 0, status: 200, content_type: "text/html", redirect_to: null, blocked_by_robots: false,
   error: null, title: null, meta_description: null, h1: null, canonical: null, meta_robots: null,
-  word_count: 0, inlinks: 0, x_robots_tag: null,
+  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0,
 };
 const pages: Page[] = [
   { ...base, url: "/a", title: "Same title for both pages here!" },
@@ -75,4 +75,12 @@ assert.deepEqual(short("self"), ["/"]);
 assert.deepEqual(short("bad-canonical"), ["/f"], "only crawled non-200 targets");
 assert.deepEqual(short("no-canonical"), ["/a", "/b", "/c", "/d"], "HTML 200 pages only");
 assert.deepEqual(short("x-robots"), ["/b", "/pdf"]);
+const broken = [
+  { source: "/s", target: "/in404", anchor: null, status: 404, error: null, external: false },
+  { source: "/s", target: "x/500", anchor: null, status: 500, error: null, external: true },
+  { source: "/s", target: "x/dns", anchor: null, status: null, error: "dns", external: true },
+].map((b) => ({ ...b, url: b.target }));
+assert.deepEqual(pick(broken, BROKEN_FILTERS, "external"), ["x/500", "x/dns"]);
+assert.deepEqual(pick(broken, BROKEN_FILTERS, "client"), ["/in404"]);
+assert.deepEqual(pick(broken, BROKEN_FILTERS, "none"), ["x/dns"]);
 console.log("pages.check: ok");

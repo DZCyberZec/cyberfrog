@@ -22,8 +22,10 @@ pub type CrawlResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 pub struct Config {
     pub start: Url,
     pub concurrency: usize,
-    /// Upper bound on URLs stored; URLs discovered past it are dropped.
+    /// Upper bound on URLs stored; URLs discovered past it are dropped. Also caps external checks.
     pub max_urls: usize,
+    /// After the crawl, request every linked external URL once to record its status.
+    pub check_external: bool,
 }
 
 struct Fetched {
@@ -48,7 +50,15 @@ struct HtmlData {
     canonical: Option<Url>,
     meta_robots: Option<String>,
     word_count: u32,
-    links: Vec<Url>,
+    links: Vec<Link>,
+}
+
+/// An `<a href>` found in a page.
+#[derive(Debug, PartialEq)]
+struct Link {
+    url: Url,
+    /// Visible text, or the alt text of an image inside the link.
+    anchor: Option<String>,
 }
 
 #[derive(Debug, PartialEq, serde::Serialize)]
@@ -69,17 +79,31 @@ pub struct Page {
     pub x_robots_tag: Option<String>,
     /// Distinct crawled pages linking here with `<a href>`, self-links excluded.
     pub inlinks: u32,
+    /// Distinct same-site URLs this page links to, itself excluded.
+    pub outlinks: u32,
+    /// Distinct external URLs this page links to.
+    pub external_outlinks: u32,
 }
 
-/// Crawl progress: URLs written so far, and URLs waiting or in flight.
+/// Crawl progress within a stage: items finished, and items waiting or in flight.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
 pub struct Progress {
+    pub stage: Stage,
     pub done: usize,
     pub pending: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Stage {
+    /// Fetching same-site pages.
+    Pages,
+    /// Checking the status of linked external URLs.
+    External,
+}
+
 /// Opens an existing crawl without creating or changing anything in the file.
-fn open_existing(path: &Path) -> rusqlite::Result<Connection> {
+pub(crate) fn open_existing(path: &Path) -> rusqlite::Result<Connection> {
     Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -95,10 +119,19 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
     } else {
         "NULL"
     };
+    // crawls saved before external links were stored count every link as same-site
+    let (outlinks, external) = if db.prepare("SELECT external FROM links LIMIT 0").is_ok() {
+        (
+            "(SELECT count(*) FROM links WHERE source = pages.url AND external = 0)",
+            "(SELECT count(*) FROM links WHERE source = pages.url AND external = 1)",
+        )
+    } else {
+        ("(SELECT count(*) FROM links WHERE source = pages.url)", "0")
+    };
     let mut stmt = db.prepare(&format!(
         "SELECT url, depth, status, content_type, redirect_to, blocked_by_robots, error,
                 title, meta_description, h1, canonical, meta_robots, word_count,
-                (SELECT count(*) FROM links WHERE target = pages.url), {x_robots}
+                (SELECT count(*) FROM links WHERE target = pages.url), {x_robots}, {outlinks}, {external}
          FROM pages ORDER BY rowid"
     ))?;
     stmt.query_map([], |r| {
@@ -118,6 +151,8 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
             word_count: r.get(12)?,
             inlinks: r.get(13)?,
             x_robots_tag: r.get(14)?,
+            outlinks: r.get(15)?,
+            external_outlinks: r.get(16)?,
         })
     })?
     .collect()
@@ -144,11 +179,19 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              x_robots_tag      TEXT
          );
          CREATE TABLE IF NOT EXISTS links (
-             source TEXT NOT NULL,
-             target TEXT NOT NULL,
+             source   TEXT NOT NULL,
+             target   TEXT NOT NULL,
+             anchor   TEXT,
+             external INTEGER NOT NULL DEFAULT 0,
              PRIMARY KEY (source, target)
          ) WITHOUT ROWID;
-         CREATE INDEX IF NOT EXISTS links_target ON links (target);",
+         CREATE INDEX IF NOT EXISTS links_target ON links (target);
+         CREATE TABLE IF NOT EXISTS external (
+             url          TEXT PRIMARY KEY,
+             status       INTEGER,
+             content_type TEXT,
+             error        TEXT
+         );",
     )?;
     Ok(db)
 }
@@ -210,6 +253,7 @@ pub async fn crawl(
                 )?;
                 written += 1;
                 on_progress(Progress {
+                    stage: Stage::Pages,
                     done: written,
                     pending: queue.len() + tasks.len(),
                 });
@@ -224,12 +268,15 @@ pub async fn crawl(
         let page = joined?;
         let is_html = page.html.is_some();
         let html = page.html.unwrap_or_default();
-        let links: Vec<Url> = html
+        let (internal, external): (Vec<Link>, Vec<Link>) = html
             .links
             .into_iter()
-            .map(normalize)
-            .filter(|l| same_site(l, &cfg.start))
-            .collect();
+            .map(|l| Link {
+                url: normalize(l.url),
+                ..l
+            })
+            .filter(|l| matches!(l.url.scheme(), "http" | "https"))
+            .partition(|l| same_site(&l.url, &cfg.start));
 
         // shortcut: one transaction per page, batch several if large crawls get slow
         let tx = db.transaction()?;
@@ -254,10 +301,25 @@ pub async fn crawl(
             ],
         )?;
         {
-            let mut insert =
-                tx.prepare_cached("INSERT OR IGNORE INTO links (source, target) VALUES (?1, ?2)")?;
-            for link in links.iter().filter(|l| **l != page.url) {
-                insert.execute(params![page.url.as_str(), link.as_str()])?;
+            // OR IGNORE keeps the first anchor when a page links the same target twice
+            let mut insert = tx.prepare_cached(
+                "INSERT OR IGNORE INTO links (source, target, anchor, external) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            for link in internal.iter().filter(|l| l.url != page.url) {
+                insert.execute(params![
+                    page.url.as_str(),
+                    link.url.as_str(),
+                    link.anchor,
+                    false
+                ])?;
+            }
+            for link in &external {
+                insert.execute(params![
+                    page.url.as_str(),
+                    link.url.as_str(),
+                    link.anchor,
+                    true
+                ])?;
             }
         }
         tx.commit()?;
@@ -267,17 +329,91 @@ pub async fn crawl(
             .redirect_to
             .map(normalize)
             .filter(|l| same_site(l, &cfg.start));
-        for link in redirect.into_iter().chain(links) {
+        for link in redirect
+            .into_iter()
+            .chain(internal.into_iter().map(|l| l.url))
+        {
             if seen.len() < cfg.max_urls && seen.insert(link.to_string()) {
                 queue.push_back((link, page.depth + 1));
             }
         }
         on_progress(Progress {
+            stage: Stage::Pages,
             done: written,
             pending: queue.len() + tasks.len(),
         });
     }
+    if cfg.check_external {
+        check_external(
+            &client,
+            &mut db,
+            concurrency,
+            cfg.max_urls,
+            &mut on_progress,
+        )
+        .await?;
+    }
     Ok(written)
+}
+
+/// Requests each external link target once and stores its status in `external`.
+async fn check_external(
+    client: &Client,
+    db: &mut Connection,
+    concurrency: usize,
+    max: usize,
+    on_progress: &mut (impl FnMut(Progress) + Send),
+) -> CrawlResult<()> {
+    let targets: Vec<String> = db
+        .prepare("SELECT DISTINCT target FROM links WHERE external = 1 ORDER BY target LIMIT ?1")?
+        .query_map([max as i64], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let total = targets.len();
+    let mut queue = targets.into_iter();
+    let mut tasks = JoinSet::new();
+    let mut done = 0;
+    loop {
+        while tasks.len() < concurrency
+            && let Some(url) = queue.next()
+        {
+            tasks.spawn(status_of(client.clone(), url));
+        }
+        let Some(joined) = tasks.join_next().await else {
+            break;
+        };
+        let (url, status, content_type, error) = joined?;
+        db.execute(
+            "INSERT OR REPLACE INTO external (url, status, content_type, error) VALUES (?1, ?2, ?3, ?4)",
+            params![url, status, content_type, error],
+        )?;
+        done += 1;
+        on_progress(Progress {
+            stage: Stage::External,
+            done,
+            pending: total - done,
+        });
+    }
+    Ok(())
+}
+
+/// HEAD first; any HEAD error status or failure is confirmed with GET, since some servers
+/// (support.google.com among them) answer HEAD with 404 for pages that exist. Redirects are not followed.
+async fn status_of(
+    client: Client,
+    url: String,
+) -> (String, Option<u16>, Option<String>, Option<String>) {
+    let head = client.head(&url).send().await;
+    let resp = match head {
+        Ok(r) if r.status().as_u16() < 400 => Ok(r),
+        _ => client.get(&url).send().await,
+    };
+    match resp {
+        Ok(r) => {
+            let content_type = header(&r, CONTENT_TYPE);
+            (url, Some(r.status().as_u16()), content_type, None)
+        }
+        Err(e) => (url, None, None, Some(e.to_string())),
+    }
 }
 
 fn normalize(mut url: Url) -> Url {
@@ -363,6 +499,7 @@ static H1: LazyLock<Selector> = LazyLock::new(|| selector("h1"));
 static META: LazyLock<Selector> = LazyLock::new(|| selector("meta[name][content]"));
 static LINK_REL: LazyLock<Selector> = LazyLock::new(|| selector("link[rel][href]"));
 static BODY: LazyLock<Selector> = LazyLock::new(|| selector("body"));
+static IMG_ALT: LazyLock<Selector> = LazyLock::new(|| selector("img[alt]"));
 
 // shortcut: ignores <base href>, add it when a site needs it
 fn parse_html(base: &Url, html: &str) -> HtmlData {
@@ -396,7 +533,14 @@ fn parse_html(base: &Url, html: &str) -> HtmlData {
         word_count: word_count(&doc),
         links: doc
             .select(&ANCHORS)
-            .filter_map(|a| base.join(a.value().attr("href")?.trim()).ok())
+            .filter_map(|a| {
+                let url = base.join(a.value().attr("href")?.trim()).ok()?;
+                let anchor = squash(a.text()).or_else(|| {
+                    a.select(&IMG_ALT)
+                        .find_map(|img| squash(img.value().attr("alt")))
+                });
+                Some(Link { url, anchor })
+            })
             .collect(),
     }
 }
@@ -432,6 +576,7 @@ fn word_count(doc: &Html) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::report;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
@@ -461,6 +606,10 @@ mod tests {
             ),
             _ => ("404 Not Found", "Content-Type: text/html\r\n", "nope"),
         };
+        http(status, headers, body)
+    }
+
+    fn http(status: &str, headers: &str, body: &str) -> String {
         format!(
             "HTTP/1.1 {status}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
@@ -468,17 +617,28 @@ mod tests {
     }
 
     async fn serve() -> Url {
+        serve_with(|_, path| respond(path)).await
+    }
+
+    /// Local HTTP server answering each request with `handler(method, path)`.
+    async fn serve_with(handler: impl Fn(&str, &str) -> String + Send + Sync + 'static) -> Url {
+        let handler = std::sync::Arc::new(handler);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
             loop {
                 let (mut sock, _) = listener.accept().await.unwrap();
+                let handler = handler.clone();
                 tokio::spawn(async move {
                     let mut buf = vec![0; 4096];
                     let n = sock.read(&mut buf).await.unwrap();
                     let req = String::from_utf8_lossy(&buf[..n]);
-                    let path = req.split_whitespace().nth(1).unwrap_or("/").to_owned();
-                    sock.write_all(respond(&path).as_bytes()).await.unwrap();
+                    let mut parts = req.split_whitespace();
+                    let method = parts.next().unwrap_or("GET").to_owned();
+                    let path = parts.next().unwrap_or("/").to_owned();
+                    sock.write_all(handler(&method, &path).as_bytes())
+                        .await
+                        .unwrap();
                 });
             }
         });
@@ -521,6 +681,7 @@ mod tests {
             start: base.clone(),
             concurrency: 4,
             max_urls: 100,
+            check_external: false,
         };
 
         let mut progress = Vec::new();
@@ -573,6 +734,7 @@ mod tests {
         assert_eq!(
             progress.last(),
             Some(&Progress {
+                stage: Stage::Pages,
                 done: 6,
                 pending: 0
             })
@@ -587,6 +749,7 @@ mod tests {
             start: base.clone(),
             concurrency: 4,
             max_urls: 100,
+            check_external: false,
         };
         crawl(cfg, &path, |_| {}).await.unwrap();
 
@@ -661,7 +824,10 @@ mod tests {
         assert_eq!(data.word_count, 7); // Hello world Second one two three x
         assert_eq!(
             data.links,
-            vec![Url::parse("https://site.test/other#frag").unwrap()]
+            vec![Link {
+                url: Url::parse("https://site.test/other#frag").unwrap(),
+                anchor: Some("x".to_owned())
+            }]
         );
     }
 
@@ -682,6 +848,129 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn checks_external_links_and_reports_broken_ones() {
+        type BrokenRow = (String, String, Option<String>, Option<u16>, bool);
+        const HTML: &str = "Content-Type: text/html\r\n";
+        let ext = serve_with(|method, path| match (method, path) {
+            (_, "/ok") => http("200 OK", HTML, "fine"),
+            ("HEAD", "/nohead") => http("404 Not Found", "", ""), // like support.google.com
+            (_, "/nohead") => http("200 OK", HTML, "fine on GET"),
+            _ => http("404 Not Found", HTML, "gone"),
+        })
+        .await;
+        let e = ext.to_string();
+        let site = serve_with(move |_, path| match path {
+            "/" => http(
+                "200 OK",
+                HTML,
+                &format!(
+                    r#"<a href="/b">Pagina  B</a><a href="{e}ok">Esterno ok</a>
+                       <a href="{e}gone"><img alt="Logo rotto"></a><a href="{e}nohead">x</a>"#
+                ),
+            ),
+            "/b" => http(
+                "200 OK",
+                HTML,
+                &format!(r#"<a href="/missing">Rotto</a><a href="{e}gone">di nuovo</a>"#),
+            ),
+            _ => http("404 Not Found", HTML, "nope"),
+        })
+        .await;
+        let path = db_path("external");
+        let cfg = Config {
+            start: site.clone(),
+            concurrency: 4,
+            max_urls: 100,
+            check_external: true,
+        };
+        let mut progress = Vec::new();
+        crawl(cfg, &path, |p| progress.push(p)).await.unwrap();
+
+        let s = |p: &str| site.join(p).unwrap().to_string();
+        let x = |p: &str| ext.join(p).unwrap().to_string();
+        assert_eq!(
+            progress.last(),
+            Some(&Progress {
+                stage: Stage::External,
+                done: 3,
+                pending: 0
+            })
+        );
+
+        let external: Vec<(String, Option<u16>, u32)> = report::read_external(&path)
+            .unwrap()
+            .into_iter()
+            .map(|l| (l.url, l.status, l.inlinks))
+            .collect();
+        assert_eq!(
+            external,
+            vec![
+                (x("/gone"), Some(404), 2),
+                (x("/nohead"), Some(200), 1),
+                (x("/ok"), Some(200), 1)
+            ]
+        );
+
+        let mut broken: Vec<BrokenRow> = report::read_broken(&path)
+            .unwrap()
+            .into_iter()
+            .map(|b| (b.source, b.target, b.anchor, b.status, b.external))
+            .collect();
+        broken.sort();
+        let mut expected = vec![
+            (
+                s("/"),
+                x("/gone"),
+                Some("Logo rotto".to_owned()),
+                Some(404),
+                true,
+            ),
+            (
+                s("/b"),
+                x("/gone"),
+                Some("di nuovo".to_owned()),
+                Some(404),
+                true,
+            ),
+            (
+                s("/b"),
+                s("/missing"),
+                Some("Rotto".to_owned()),
+                Some(404),
+                false,
+            ),
+        ];
+        expected.sort();
+        assert_eq!(broken, expected);
+
+        let links = report::page_links(&path, &s("/")).unwrap();
+        let out: Vec<(String, Option<u16>, bool)> = links
+            .outlinks
+            .into_iter()
+            .map(|l| (l.url, l.status, l.external))
+            .collect();
+        assert_eq!(
+            out[0],
+            (s("/b"), Some(200), false),
+            "same-site links come first"
+        );
+        assert_eq!(out.len(), 4);
+        let into_b = report::page_links(&path, &s("/b")).unwrap().inlinks;
+        assert_eq!(into_b.len(), 1);
+        assert_eq!(
+            (into_b[0].url.as_str(), into_b[0].anchor.as_deref()),
+            (s("/").as_str(), Some("Pagina B"))
+        );
+
+        let home = read_pages(&path)
+            .unwrap()
+            .into_iter()
+            .find(|p| p.url == s("/"))
+            .unwrap();
+        assert_eq!((home.outlinks, home.external_outlinks), (1, 3));
+    }
+
+    #[tokio::test]
     async fn stops_at_max_urls() {
         let base = serve().await;
         let path = db_path("limit");
@@ -689,6 +978,7 @@ mod tests {
             start: base,
             concurrency: 2,
             max_urls: 2,
+            check_external: false,
         };
 
         assert_eq!(crawl(cfg, &path, |_| {}).await.unwrap(), 2);

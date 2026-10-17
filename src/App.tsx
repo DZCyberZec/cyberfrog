@@ -2,16 +2,23 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { DataTable, helperFor } from "./DataTable";
+import { DetailPanel } from "./DetailPanel";
 import {
+  BROKEN_FILTERS,
   CHECKS,
   CODE_FILTERS,
+  codeLabel,
+  kindOf,
+  statusFilters,
   indexFilters,
   metaFilters,
   nonIndexableReason,
   metaRows,
   statusKind,
   statusLabel,
+  type BrokenLink,
   type Check,
+  type ExternalLink,
   type MetaRow,
   type Page,
 } from "./pages";
@@ -51,6 +58,8 @@ const internalColumns = page.columns([
   page.accessor("word_count", { header: "Parole", size: 80, cell: (c) => num(c.getValue()) }),
   page.accessor("depth", { header: "Profondità", size: 95, cell: (c) => num(c.getValue()) }),
   page.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
+  page.accessor("outlinks", { header: "Outlink", size: 85, cell: (c) => num(c.getValue()) }),
+  page.accessor("external_outlinks", { header: "Outlink esterni", size: 125, cell: (c) => num(c.getValue()) }),
   page.accessor("content_type", { header: "Content type", size: 180 }),
   page.accessor("redirect_to", { header: "Redirect a", size: 300 }),
 ]);
@@ -72,6 +81,39 @@ const indexColumns = page.columns([
   page.accessor("canonical", { header: "Canonical", size: 380 }),
 ]);
 
+/** Status badge for rows that carry only a code and maybe an error. */
+const codeCell = (status: number | null, error: string | null) => (
+  <span className={`badge ${kindOf(status)}`}>{codeLabel(status, error)}</span>
+);
+
+const ext = helperFor<ExternalLink>();
+const externalColumns = ext.columns([
+  ext.accessor("url", { header: "URL", size: 520 }),
+  ext.accessor((e) => codeLabel(e.status, e.error), {
+    id: "status",
+    header: "Stato",
+    size: 170,
+    cell: (c) => codeCell(c.row.original.status, c.row.original.error),
+  }),
+  ext.accessor("content_type", { header: "Content type", size: 200 }),
+  ext.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
+]);
+const EXTERNAL_FILTERS = statusFilters<ExternalLink>();
+
+const broke = helperFor<BrokenLink>();
+const brokenColumns = broke.columns([
+  broke.accessor("source", { header: "Pagina di origine", size: 380 }),
+  broke.accessor("target", { header: "Link rotto", size: 380 }),
+  broke.accessor("anchor", { header: "Anchor text", size: 220 }),
+  broke.accessor((b) => codeLabel(b.status, b.error), {
+    id: "status",
+    header: "Stato",
+    size: 170,
+    cell: (c) => codeCell(c.row.original.status, c.row.original.error),
+  }),
+  broke.accessor((b) => (b.external ? "Esterno" : "Interno"), { id: "kind", header: "Tipo", size: 90 }),
+]);
+
 const meta = helperFor<MetaRow>();
 const metaTabs = CHECKS.map((check) => ({
   check,
@@ -84,11 +126,13 @@ const metaTabs = CHECKS.map((check) => ({
   ]),
 }));
 
-type Tab = "internal" | "codes" | "index" | Check["field"];
+type Tab = "internal" | "codes" | "index" | "external" | "broken" | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
   { id: "internal", label: "Interni" },
   { id: "codes", label: "Codici di risposta" },
   { id: "index", label: "Indicizzabilità" },
+  { id: "external", label: "Link esterni" },
+  { id: "broken", label: "Link rotti" },
   ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
 ];
 
@@ -96,15 +140,18 @@ const fmt = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
 const when = new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" });
 
 /** Mirror the Rust structs in src-tauri/src/lib.rs and crawler.rs. */
-type CrawlData = { path: string; pages: Page[] };
+type CrawlData = { path: string; pages: Page[]; external: ExternalLink[]; broken: BrokenLink[] };
 type CrawlSummary = { path: string; start_url: string | null; pages: number; modified_ms: number };
-type Progress = { done: number; pending: number };
+type Progress = { stage: "pages" | "external"; done: number; pending: number };
 
 const SQLITE_FILTER = [{ name: "Crawl CyberFrog", extensions: ["sqlite"] }];
 
 export default function App() {
   const [url, setUrl] = useState("https://");
   const [pages, setPages] = useState<Page[]>([]);
+  const [external, setExternal] = useState<ExternalLink[]>([]);
+  const [broken, setBroken] = useState<BrokenLink[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
   const [crawlPath, setCrawlPath] = useState<string | null>(null);
   const [recent, setRecent] = useState<CrawlSummary[]>([]);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -121,6 +168,9 @@ export default function App() {
 
   function show(data: CrawlData) {
     setPages(data.pages);
+    setExternal(data.external);
+    setBroken(data.broken);
+    setSelected(null);
     setCrawlPath(data.path);
     if (data.pages[0]) setUrl(data.pages[0].url);
   }
@@ -131,7 +181,7 @@ export default function App() {
     setError(null);
     setNotice(null);
     setElapsed(null);
-    setProgress({ done: 0, pending: 1 });
+    setProgress({ stage: "pages", done: 0, pending: 1 });
     const onProgress = new Channel<Progress>();
     onProgress.onmessage = setProgress;
     const t0 = performance.now();
@@ -185,6 +235,11 @@ export default function App() {
   const metaTab = metaTabs.find((t) => t.check.field === tab);
   const rows = useMemo(() => (metaTab ? metaRows(pages, metaTab.check.field) : []), [pages, metaTab]);
   const host = pages[0] ? new URL(pages[0].url).hostname : "crawl";
+  /** Row selection for tables whose rows carry a crawled `url`: opens the detail panel. */
+  const selectByUrl = {
+    onRowClick: (r: { url: string }) => setSelected(r.url),
+    isSelected: (r: { url: string }) => r.url === selected,
+  };
 
   return (
     <main className="app">
@@ -237,7 +292,7 @@ export default function App() {
           <h1>Scansione in corso…</h1>
           <p className="big-number">{(progress?.done ?? 0).toLocaleString("it-IT")}</p>
           <p>
-            URL analizzati
+            {progress?.stage === "external" ? "Link esterni verificati" : "URL analizzati"}
             {progress && progress.pending > 0 && ` · ${progress.pending.toLocaleString("it-IT")} in coda`}
           </p>
         </section>
@@ -273,6 +328,7 @@ export default function App() {
             <Stat label="4xx" value={counts.client} kind="client" />
             <Stat label="5xx" value={counts.server} kind="server" />
             <Stat label="Bloccati" value={counts.blocked} kind="blocked" />
+            <Stat label="Link rotti" value={broken.length} kind={broken.length ? "client" : undefined} />
             {elapsed !== null && <span className="time">{fmt.format(elapsed)} s</span>}
           </div>
 
@@ -280,40 +336,80 @@ export default function App() {
             {TABS.map((t) => (
               <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
                 {t.label}
+                {t.id === "broken" && broken.length > 0 && <span className="count">{broken.length}</span>}
               </button>
             ))}
           </nav>
 
-          {tab === "internal" && (
-            <DataTable key="internal" data={pages} columns={internalColumns} exportName={`${host}-interni`} />
-          )}
-          {tab === "codes" && (
-            <DataTable
-              key="codes"
-              data={pages}
-              columns={codeColumns}
-              filters={CODE_FILTERS}
-              exportName={`${host}-codici-risposta`}
-            />
-          )}
-          {tab === "index" && (
-            <DataTable
-              key="index"
-              data={pages}
-              columns={indexColumns}
-              filters={indexTabFilters}
-              exportName={`${host}-indicizzabilita`}
-            />
-          )}
-          {metaTab && (
-            <DataTable
-              key={tab}
-              data={rows}
-              columns={metaTab.columns}
-              filters={metaTab.filters}
-              exportName={`${host}-${tab.replace("_", "-")}`}
-            />
-          )}
+          <div className="workspace">
+            {tab === "internal" && (
+              <DataTable
+                key="internal"
+                data={pages}
+                columns={internalColumns}
+                exportName={`${host}-interni`}
+                {...selectByUrl}
+              />
+            )}
+            {tab === "codes" && (
+              <DataTable
+                key="codes"
+                data={pages}
+                columns={codeColumns}
+                filters={CODE_FILTERS}
+                exportName={`${host}-codici-risposta`}
+                {...selectByUrl}
+              />
+            )}
+            {tab === "index" && (
+              <DataTable
+                key="index"
+                data={pages}
+                columns={indexColumns}
+                filters={indexTabFilters}
+                exportName={`${host}-indicizzabilita`}
+                {...selectByUrl}
+              />
+            )}
+            {tab === "external" && (
+              <DataTable
+                key="external"
+                data={external}
+                columns={externalColumns}
+                filters={EXTERNAL_FILTERS}
+                exportName={`${host}-link-esterni`}
+              />
+            )}
+            {tab === "broken" && (
+              <DataTable
+                key="broken"
+                data={broken}
+                columns={brokenColumns}
+                filters={BROKEN_FILTERS}
+                exportName={`${host}-link-rotti`}
+                onRowClick={(b) => setSelected(b.source)}
+                isSelected={(b) => b.source === selected}
+              />
+            )}
+            {metaTab && (
+              <DataTable
+                key={tab}
+                data={rows}
+                columns={metaTab.columns}
+                filters={metaTab.filters}
+                exportName={`${host}-${tab.replace("_", "-")}`}
+                {...selectByUrl}
+              />
+            )}
+            {selected && crawlPath && (
+              <DetailPanel
+                crawlPath={crawlPath}
+                url={selected}
+                onClose={() => setSelected(null)}
+                onNavigate={setSelected}
+              />
+            )}
+          </div>
         </>
       )}
     </main>

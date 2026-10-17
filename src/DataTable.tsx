@@ -35,10 +35,19 @@ type Props<T extends RowData> = {
   filters?: FilterDef<T>[];
   /** File name suggested by the CSV export, without extension. */
   exportName: string;
+  onRowClick?: (row: T) => void;
+  isSelected?: (row: T) => boolean;
 };
 
 /** Filter chips, CSV export and a sortable, virtualized table. Give it a `key` per report. */
-export function DataTable<T extends RowData>({ data, columns, filters, exportName }: Props<T>) {
+export function DataTable<T extends RowData>({
+  data,
+  columns,
+  filters,
+  exportName,
+  onRowClick,
+  isSelected,
+}: Props<T>) {
   const [filterId, setFilterId] = useState(filters?.[0]?.id);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
   const active = filters?.find((f) => f.id === filterId);
@@ -77,7 +86,7 @@ export function DataTable<T extends RowData>({ data, columns, filters, exportNam
   }
 
   return (
-    <>
+    <div className="table-pane">
       <div className="filters">
         {filters?.map((f) => (
           <button key={f.id} type="button" aria-pressed={f.id === filterId} onClick={() => setFilterId(f.id)}>
@@ -118,7 +127,15 @@ export function DataTable<T extends RowData>({ data, columns, filters, exportNam
             {items.map((vi) => {
               const row = rows[vi.index];
               return (
-                <tr key={row.id} style={{ height: ROW_HEIGHT }}>
+                <tr
+                key={row.id}
+                style={{ height: ROW_HEIGHT }}
+                className={onRowClick ? `clickable${isSelected?.(row.original) ? " selected" : ""}` : undefined}
+                onClick={onRowClick && (() => onRowClick(row.original))}
+                tabIndex={onRowClick ? 0 : undefined}
+                onKeyDown={onRowClick && ((e) => e.key === "Enter" && onRowClick(row.original))}
+                aria-selected={onRowClick ? (isSelected?.(row.original) ?? false) : undefined}
+              >
                   {row.getAllCells().map((cell) => {
                     const value = cell.getValue();
                     return (
@@ -135,7 +152,7 @@ export function DataTable<T extends RowData>({ data, columns, filters, exportNam
         </table>
         {rows.length === 0 && <p className="empty">Nessun URL in questa vista.</p>}
       </div>
-    </>
+    </div>
   );
 }
 

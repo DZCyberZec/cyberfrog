@@ -65,11 +65,13 @@ docs/clean-room-map.md     funzionalità di riferimento
 - confronto tra due crawl
 - visualizzazione della struttura del sito
 
-**Decisioni già prese dall'utente:** licenza Apache-2.0, repo GitHub **pubblico**, nome "CyberFrog – Another SEO Tool". Icona dell'app: rana verde neon con circuiti, fornita in chat. Va salvata come `icon.png` nella cartella del progetto, poi `npx tauri icon icon.png` e usata anche come logo nell'header. Ordine concordato: icona → inglese + README → GitHub (chiedere conferma prima del push; `gh` non è installato).
+**Pubblicato (2026-10-17):** repo pubblico https://github.com/DZCyberZec/cyberfrog (Apache-2.0), release [v0.1.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.1.0) con il DMG per Apple silicon. Commit con l'indirizzo noreply di GitHub (`git config user.email` locale già impostato): non usare l'email personale. Fatti anche icona (rana disegnata in `branding/cyberfrog-icon.svg`), interfaccia IT/EN (`src/i18n.ts`: aggiungi ogni testo nuovo al dizionario `EN`, il self-check lo verifica), README in inglese con screenshot in `docs/screenshots/`.
+
+**Per una nuova versione:** alza la versione in `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`, poi `npx tauri build`, poi `gh release create vX.Y.Z src-tauri/target/release/bundle/dmg/*.dmg`.
 
 **Migliorie note:** 15 tab sono troppi (barra orizzontale con scroll): raggrupparli in una barra laterale come Screaming Frog. Rendering JavaScript.
 
-**Rifinitura e pubblicazione** (l'utente ha chiesto di farla dopo aver finito l'app):
+**Rifinitura e pubblicazione** (fatte, vedi sopra; resta da fare):
 1. Logo/icona dell'app: chiedere all'utente la direzione grafica, poi `npx tauri icon <png 1024>`.
 2. Interfaccia IT/EN con selettore di lingua.
 3. README in inglese, con screenshot e nota clean-room.

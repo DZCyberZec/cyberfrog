@@ -15,6 +15,9 @@ import {
   SITEMAP_FILTERS,
   PERF_FILTERS,
   SLOW_MS,
+  HREFLANG_FILTERS,
+  hreflangIssues,
+  hreflangPages,
   buildSitemapXml,
   medianMs,
   codeLabel,
@@ -30,6 +33,8 @@ import {
   type BrokenLink,
   type Check,
   type ExternalLink,
+  type HreflangPage,
+  type HreflangRow,
   type ImageRow,
   type MetaRow,
   type Page,
@@ -169,6 +174,19 @@ const imageColumns = img.columns([
   img.accessor("content_type", { header: "Content type", size: 140 }),
 ]);
 
+const hl = helperFor<HreflangPage>();
+const hreflangColumns = hl.columns([
+  hl.accessor("url", { header: "URL", size: 420 }),
+  hl.accessor("langs", { header: "Lingue", size: 240 }),
+  hl.accessor("count", { header: "Annotazioni", size: 110, cell: (c) => num(c.getValue()) }),
+  hl.accessor(hreflangIssues, {
+    id: "issues",
+    header: "Problemi",
+    size: 420,
+    cell: (c) => (c.getValue() ? <span className="issue">{c.getValue()}</span> : <span className="badge ok">OK</span>),
+  }),
+]);
+
 const meta = helperFor<MetaRow>();
 const metaTabs = CHECKS.map((check) => ({
   check,
@@ -181,7 +199,17 @@ const metaTabs = CHECKS.map((check) => ({
   ]),
 }));
 
-type Tab = "internal" | "codes" | "index" | "external" | "broken" | "images" | "sitemap" | "perf" | Check["field"];
+type Tab =
+  | "internal"
+  | "codes"
+  | "index"
+  | "external"
+  | "broken"
+  | "images"
+  | "sitemap"
+  | "perf"
+  | "hreflang"
+  | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
   { id: "internal", label: "Interni" },
   { id: "codes", label: "Codici di risposta" },
@@ -191,6 +219,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "images", label: "Immagini" },
   { id: "sitemap", label: "Sitemap" },
   { id: "perf", label: "Prestazioni" },
+  { id: "hreflang", label: "Hreflang" },
   ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
 ];
 
@@ -204,6 +233,7 @@ type CrawlData = {
   external: ExternalLink[];
   broken: BrokenLink[];
   images: ImageRow[];
+  hreflang: HreflangRow[];
 };
 type CrawlSummary = { path: string; start_url: string | null; pages: number; modified_ms: number };
 type Progress = { stage: "pages" | "external" | "images"; done: number; pending: number };
@@ -222,6 +252,7 @@ export default function App() {
   const [broken, setBroken] = useState<BrokenLink[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [images, setImages] = useState<ImageRow[]>([]);
+  const [hreflang, setHreflang] = useState<HreflangRow[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [crawlPath, setCrawlPath] = useState<string | null>(null);
   const [recent, setRecent] = useState<CrawlSummary[]>([]);
@@ -244,6 +275,7 @@ export default function App() {
     setExternal(data.external);
     setBroken(data.broken);
     setImages(data.images);
+    setHreflang(data.hreflang);
     setSelected(null);
     setSelectedImage(null);
     setCrawlPath(data.path);
@@ -318,6 +350,7 @@ export default function App() {
     return c;
   }, [pages]);
 
+  const hreflangRows = useMemo(() => hreflangPages(pages, hreflang), [pages, hreflang]);
   const median = useMemo(() => medianMs(pages), [pages]);
   const indexable = useMemo(() => pages.filter((p) => nonIndexableReason(p) === null).length, [pages]);
   const indexTabFilters = useMemo(() => indexFilters(pages), [pages]);
@@ -520,6 +553,16 @@ export default function App() {
                     Genera sitemap XML
                   </button>
                 }
+                {...selectByUrl}
+              />
+            )}
+            {tab === "hreflang" && (
+              <DataTable
+                key="hreflang"
+                data={hreflangRows}
+                columns={hreflangColumns}
+                filters={HREFLANG_FILTERS}
+                exportName={`${host}-hreflang`}
                 {...selectByUrl}
               />
             )}

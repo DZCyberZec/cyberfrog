@@ -96,6 +96,8 @@ struct HtmlData {
     word_count: u32,
     links: Vec<Link>,
     images: Vec<Image>,
+    /// `<link rel="alternate" hreflang>` annotations: (language code as written, target).
+    hreflang: Vec<(String, Url)>,
 }
 
 /// An `<img src>` found in a page.
@@ -270,6 +272,12 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              PRIMARY KEY (source, target)
          ) WITHOUT ROWID;
          CREATE INDEX IF NOT EXISTS links_target ON links (target);
+         CREATE TABLE IF NOT EXISTS hreflang (
+             page TEXT NOT NULL,
+             lang TEXT NOT NULL,
+             href TEXT NOT NULL,
+             PRIMARY KEY (page, lang, href)
+         ) WITHOUT ROWID;
          CREATE TABLE IF NOT EXISTS sitemap (
              url  TEXT PRIMARY KEY,
              file TEXT NOT NULL
@@ -450,6 +458,12 @@ pub async fn crawl(
                     link.anchor,
                     false
                 ])?;
+            }
+            let mut insert_hreflang = tx.prepare_cached(
+                "INSERT OR IGNORE INTO hreflang (page, lang, href) VALUES (?1, ?2, ?3)",
+            )?;
+            for (lang, href) in &html.hreflang {
+                insert_hreflang.execute(params![page.url.as_str(), lang, href.as_str()])?;
             }
             let mut insert_img = tx.prepare_cached(
                 "INSERT OR IGNORE INTO images (page, src, alt, has_size) VALUES (?1, ?2, ?3, ?4)",
@@ -897,6 +911,21 @@ fn parse_html(base: &Url, html: &str) -> HtmlData {
                 Some(Link { url, anchor })
             })
             .collect(),
+        // shortcut: <head> annotations only, not the HTTP Link header or sitemap xhtml:link variants
+        hreflang: doc
+            .select(&LINK_REL)
+            .filter(|l| {
+                l.value().attr("rel").is_some_and(|rel| {
+                    rel.split_ascii_whitespace()
+                        .any(|r| r.eq_ignore_ascii_case("alternate"))
+                })
+            })
+            .filter_map(|l| {
+                let lang = l.value().attr("hreflang")?.trim().to_owned();
+                let href = base.join(l.value().attr("href")?.trim()).ok()?;
+                Some((lang, normalize(href)))
+            })
+            .collect(),
         // shortcut: only `src`, not srcset or <picture><source>; add them when a site relies on them
         images: doc
             .select(&IMG)
@@ -960,7 +989,8 @@ mod tests {
             "/" => (
                 "200 OK",
                 "Content-Type: text/html\r\n",
-                r##"<a href="/a">a</a><a href="/private/x">p</a><a href="/old">o</a>
+                r##"<link rel="alternate" hreflang="it" href="/"><link rel="alternate" hreflang="en" href="/en/">
+                    <a href="/a">a</a><a href="/private/x">p</a><a href="/old">o</a>
                     <a href="http://other.example/">ext</a><a href="#top">f</a><a href="mailto:x@y.z">m</a>"##,
             ),
             "/a" => (
@@ -1086,6 +1116,18 @@ mod tests {
             Some("noindex, googlebot: nofollow")
         );
         assert_eq!(x_robots("/a"), None);
+        let hreflang: Vec<(String, String, String)> = report::read_hreflang(&path)
+            .unwrap()
+            .into_iter()
+            .map(|h| (h.page, h.lang, h.href))
+            .collect();
+        assert_eq!(
+            hreflang,
+            vec![
+                (u("/"), "en".into(), u("/en/")),
+                (u("/"), "it".into(), u("/"))
+            ]
+        );
         let new = pages.iter().find(|pg| pg.url == u("/new")).unwrap();
         assert_eq!(new.size_bytes, Some("<p>no links</p>".len() as i64));
         assert!(new.response_ms.is_some());
@@ -1185,6 +1227,10 @@ mod tests {
             <meta name="robots" content="noindex, follow">
             <link rel="stylesheet" href="/s.css">
             <link rel="Canonical" href=" ../post?ref=1 ">
+            <link rel="alternate" hreflang="en-GB" href="/en/post#top">
+            <link rel="alternate" hreflang="x-default" href="https://site.test/blog/post">
+            <link rel="alternate" type="application/rss+xml" href="/feed">
+            <link rel="canonical" hreflang="it" href="/not-an-alternate">
             <style>.x { color: red }</style>
           </head><body>
             <h1>Hello <span>world</span></h1><h1>Second</h1>
@@ -1204,6 +1250,19 @@ mod tests {
             Some("https://site.test/post?ref=1")
         );
         assert_eq!(data.h1.as_deref(), Some("Hello world"));
+        let hreflang: Vec<(&str, &str)> = data
+            .hreflang
+            .iter()
+            .map(|(l, u)| (l.as_str(), u.as_str()))
+            .collect();
+        assert_eq!(
+            hreflang,
+            vec![
+                ("en-GB", "https://site.test/en/post"),
+                ("x-default", "https://site.test/blog/post")
+            ],
+            "only rel=alternate links with hreflang, fragments dropped"
+        );
         assert_eq!(data.word_count, 7); // Hello world Second one two three x
         assert_eq!(
             data.links,

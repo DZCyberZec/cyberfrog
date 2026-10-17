@@ -309,3 +309,68 @@ export function medianMs(pages: Page[]): number | null {
   const mid = times.length >> 1;
   return times.length % 2 ? times[mid] : Math.round((times[mid - 1] + times[mid]) / 2);
 }
+
+/** Mirrors `report::HreflangRow`. */
+export type HreflangRow = { page: string; lang: string; href: string };
+
+/** One page's hreflang annotations and what is wrong with them. */
+export type HreflangPage = {
+  url: string;
+  langs: string;
+  count: number;
+  invalid: string[];
+  /** Crawled alternates that don't link back to this page. */
+  noReturn: string[];
+  /** Crawled alternates that answered something other than 200. */
+  badTarget: string[];
+  selfRef: boolean;
+  xDefault: boolean;
+};
+
+const LANG_CODE = /^(x-default|[a-z]{2,3}(-[a-z]{4})?(-([a-z]{2}|\d{3}))?)$/i;
+
+/** Language[-Script][-Region] or x-default. */
+// shortcut: checks the format, not the ISO lists; only flags "-UK", the classic mistake for GB
+export function validHreflang(code: string): boolean {
+  return LANG_CODE.test(code) && !/-uk$/i.test(code);
+}
+
+export function hreflangPages(pages: Page[], rows: HreflangRow[]): HreflangPage[] {
+  const byUrl = new Map(pages.map((p) => [p.url, p]));
+  const byPage = new Map<string, HreflangRow[]>();
+  for (const r of rows) byPage.set(r.page, [...(byPage.get(r.page) ?? []), r]);
+  return [...byPage].map(([url, entries]) => {
+    const others = entries.filter((e) => e.href !== url && byUrl.has(e.href));
+    return {
+      url,
+      langs: entries.map((e) => e.lang).join(", "),
+      count: entries.length,
+      invalid: entries.filter((e) => !validHreflang(e.lang)).map((e) => e.lang),
+      noReturn: others.filter((e) => !(byPage.get(e.href) ?? []).some((t) => t.href === url)).map((e) => e.href),
+      badTarget: entries.filter((e) => byUrl.has(e.href) && byUrl.get(e.href)!.status !== 200).map((e) => e.href),
+      selfRef: entries.some((e) => e.href === url),
+      xDefault: entries.some((e) => e.lang.toLowerCase() === "x-default"),
+    };
+  });
+}
+
+export function hreflangIssues(h: HreflangPage): string {
+  return [
+    h.invalid.length > 0 && `Codice non valido: ${h.invalid.join(", ")}`,
+    h.noReturn.length > 0 && `Manca il return link da ${h.noReturn.length}`,
+    h.badTarget.length > 0 && `${h.badTarget.length} alternative non 200`,
+    !h.selfRef && "Manca l'auto-riferimento",
+    !h.xDefault && "Manca x-default",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export const HREFLANG_FILTERS: FilterDef<HreflangPage>[] = [
+  { id: "all", label: "Tutte", test: () => true },
+  { id: "invalid", label: "Codice non valido", test: (h) => h.invalid.length > 0 },
+  { id: "no-return", label: "Senza return link", test: (h) => h.noReturn.length > 0 },
+  { id: "bad-target", label: "Alternative non 200", test: (h) => h.badTarget.length > 0 },
+  { id: "no-self", label: "Senza auto-riferimento", test: (h) => !h.selfRef },
+  { id: "no-x-default", label: "Senza x-default", test: (h) => !h.xDefault },
+];

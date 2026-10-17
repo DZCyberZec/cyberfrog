@@ -220,3 +220,27 @@ pub fn image_pages(path: &Path, src: &str) -> rusqlite::Result<Vec<ImageUse>> {
         })?
         .collect()
 }
+
+/// One hreflang annotation as written on a crawled page.
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct HreflangRow {
+    pub page: String,
+    pub lang: String,
+    pub href: String,
+}
+
+pub fn read_hreflang(path: &Path) -> rusqlite::Result<Vec<HreflangRow>> {
+    let db = open_existing(path)?;
+    if !compiles(&db, "SELECT 1 FROM hreflang LIMIT 0") {
+        return Ok(Vec::new());
+    }
+    db.prepare("SELECT page, lang, href FROM hreflang ORDER BY page, lang")?
+        .query_map([], |r| {
+            Ok(HreflangRow {
+                page: r.get(0)?,
+                lang: r.get(1)?,
+                href: r.get(2)?,
+            })
+        })?
+        .collect()
+}

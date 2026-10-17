@@ -207,6 +207,7 @@ button { font: inherit; }
 .grid tbody tr.clickable { cursor: pointer; }
 .grid tbody tr.selected td, .grid tbody tr.selected:hover td { background: var(--accent-soft); }
 .num { display: block; text-align: right; font-variant-numeric: tabular-nums; }
+.issue { color: var(--client); }
 .num.heavy { color: var(--client); font-weight: 600; }
 .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
 

@@ -1,7 +1,7 @@
 // Self-check for filters and CSV export. Run: node scripts/pages.check.ts
 import assert from "node:assert/strict";
 import {
-  BROKEN_FILTERS, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
+  BROKEN_FILTERS, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
 } from "../src/pages.ts";
 
 const base: Page = {
@@ -125,4 +125,26 @@ assert.deepEqual(pick(perf, PERF_FILTERS, "very-slow"), ["/crawl"]);
 assert.deepEqual(pick(perf, PERF_FILTERS, "heavy"), ["/slow"], "only HTML pages count as heavy");
 assert.equal(medianMs(perf), 1200);
 assert.equal(medianMs([]), null);
+for (const ok of ["it", "en-GB", "zh-Hant-TW", "es-419", "x-default", "EN-us"]) assert.ok(validHreflang(ok), ok);
+for (const bad of ["en-UK", "english", "en_GB", "e", "it-ITA"]) assert.ok(!validHreflang(bad), bad);
+const hp: Page[] = [
+  { ...base, url: "/it" }, { ...base, url: "/en" }, { ...base, url: "/fr" }, { ...base, url: "/de", status: 301 },
+];
+const hr = [
+  { page: "/it", lang: "it", href: "/it" }, { page: "/it", lang: "en-UK", href: "/en" },
+  { page: "/it", lang: "fr", href: "/fr" }, { page: "/it", lang: "de", href: "/de" },
+  { page: "/it", lang: "x-default", href: "/it" }, { page: "/it", lang: "es", href: "/es-not-crawled" },
+  { page: "/en", lang: "en", href: "/en" }, { page: "/en", lang: "it", href: "/it" },
+  { page: "/fr", lang: "it", href: "/it" },
+];
+const hps = hreflangPages(hp, hr);
+const it = hps.find((h) => h.url === "/it")!;
+assert.deepEqual(it.invalid, ["en-UK"]);
+assert.deepEqual(it.noReturn, ["/de"], "/en and /fr link back; /es is not crawled so not judged");
+assert.deepEqual(it.badTarget, ["/de"]);
+assert.ok(it.selfRef && it.xDefault);
+const fr = hps.find((h) => h.url === "/fr")!;
+assert.equal(hreflangIssues(fr), "Manca l'auto-riferimento · Manca x-default");
+assert.deepEqual(pick(hps, HREFLANG_FILTERS, "no-self"), ["/fr"]);
+assert.deepEqual(pick(hps, HREFLANG_FILTERS, "no-x-default"), ["/en", "/fr"]);
 console.log("pages.check: ok");

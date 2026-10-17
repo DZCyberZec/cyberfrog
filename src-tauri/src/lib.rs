@@ -1,5 +1,6 @@
 mod ai;
 pub mod crawler;
+pub mod geo;
 pub mod mcp;
 pub mod report;
 pub mod schedule;
@@ -132,6 +133,7 @@ struct CrawlData {
     structured: Vec<StructuredRow>,
     bad_links: Vec<BadLinkRow>,
     custom: CustomData,
+    geo: geo::GeoData,
 }
 
 #[derive(serde::Serialize)]
@@ -165,6 +167,7 @@ fn load(path: &Path) -> Result<CrawlData, String> {
         structured: report::read_structured(path).map_err(unreadable)?,
         bad_links: report::read_bad_links(path).map_err(unreadable)?,
         custom: report::read_custom(path).map_err(unreadable)?,
+        geo: geo::read(path).map_err(unreadable)?,
     })
 }
 

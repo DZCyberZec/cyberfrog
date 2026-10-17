@@ -327,6 +327,8 @@ struct HtmlData {
     structured: Vec<Structured>,
     /// Links Google can't follow, or hrefs that aren't valid URLs.
     bad_links: Vec<BadLink>,
+    /// What AI answer engines need to quote the page.
+    geo: crate::geo::signals::Signals,
 }
 
 /// A link a crawler can't follow: JavaScript navigation, href outside `<a>`, or an invalid URL.
@@ -618,6 +620,28 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              status       INTEGER,
              content_type TEXT,
              error        TEXT
+         );
+         CREATE TABLE IF NOT EXISTS robots_txt (
+             origin TEXT PRIMARY KEY,
+             status INTEGER,
+             body   TEXT
+         );
+         CREATE TABLE IF NOT EXISTS llms_txt (
+             url    TEXT PRIMARY KEY,
+             status INTEGER,
+             body   TEXT
+         );
+         CREATE TABLE IF NOT EXISTS geo (
+             page              TEXT PRIMARY KEY,
+             first_para_words  INTEGER NOT NULL,
+             question_headings INTEGER NOT NULL,
+             subheadings       INTEGER NOT NULL,
+             lists             INTEGER NOT NULL,
+             tables            INTEGER NOT NULL,
+             stats             INTEGER NOT NULL,
+             has_author        INTEGER NOT NULL,
+             has_date          INTEGER NOT NULL,
+             js_shell          INTEGER NOT NULL
          );",
     )?;
     Ok(db)
@@ -663,13 +687,21 @@ pub async fn crawl(
         .user_agent(&cfg.user_agent)
         .timeout(Duration::from_secs(20))
         .build()?;
+    let mut db = open_db(db_path)?;
     // one robots.txt per origin: list mode can span several sites
+    let file = robots_file(&follow, &cfg.start).await;
     let mut robots = HashMap::from([(
         cfg.start.origin().ascii_serialization(),
-        load_robots(&follow, &cfg.start, &cfg.user_agent).await,
+        store_robots(&db, &cfg.start, file, &cfg.user_agent)?,
     )]);
     let list_mode = !cfg.list.is_empty();
-    let mut db = open_db(db_path)?;
+    if let Ok(llms) = cfg.start.join("/llms.txt") {
+        let (status, body) = site_file(&follow, llms.clone()).await;
+        db.execute(
+            "INSERT OR REPLACE INTO llms_txt (url, status, body) VALUES (?1, ?2, ?3)",
+            params![llms.as_str(), status, body],
+        )?;
+    }
     let concurrency = cfg.concurrency.max(1);
     for rule in cfg.rules.iter() {
         let attr = match &rule.matcher {
@@ -729,7 +761,8 @@ pub async fn crawl(
         {
             let origin = url.origin().ascii_serialization();
             if !robots.contains_key(&origin) {
-                let robot = load_robots(&follow, &url, &cfg.user_agent).await;
+                let file = robots_file(&follow, &url).await;
+                let robot = store_robots(&db, &url, file, &cfg.user_agent)?;
                 robots.insert(origin.clone(), robot);
             }
             if cfg.respect_robots
@@ -851,6 +884,26 @@ pub async fn crawl(
             )?;
             for (lang, href) in &html.hreflang {
                 insert_hreflang.execute(params![page.url.as_str(), lang, href.as_str()])?;
+            }
+            if is_html {
+                let g = &html.geo;
+                tx.execute(
+                    "INSERT OR REPLACE INTO geo (page, first_para_words, question_headings, subheadings,
+                         lists, tables, stats, has_author, has_date, js_shell)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    params![
+                        page.url.as_str(),
+                        g.first_para_words,
+                        g.question_headings,
+                        g.subheadings,
+                        g.lists,
+                        g.tables,
+                        g.stats,
+                        g.has_author,
+                        g.has_date,
+                        g.js_shell
+                    ],
+                )?;
             }
             let mut insert_img = tx.prepare_cached(
                 "INSERT OR IGNORE INTO images (page, src, alt, has_size) VALUES (?1, ?2, ?3, ?4)",
@@ -1083,19 +1136,47 @@ fn same_site(url: &Url, start: &Url) -> bool {
         && (url.host_str(), url.port()) == (start.host_str(), start.port())
 }
 
-/// `None` means everything is allowed.
-async fn load_robots(client: &Client, start: &Url, user_agent: &str) -> Option<Robot> {
-    let resp = client
-        .get(start.join("/robots.txt").ok()?)
-        .send()
-        .await
-        .ok()?;
-    // shortcut: any non-2xx allows all, Google treats 5xx as disallow-all
-    if !resp.status().is_success() {
-        return None;
+/// Size cap for robots.txt and llms.txt; Google also reads only the first 500 KiB of robots.txt.
+const MAX_SITE_FILE: usize = 512 * 1024;
+
+/// Status and text of a small file at a site's root; the body only when it answered 2xx.
+async fn site_file(client: &Client, url: Url) -> (Option<u16>, Option<String>) {
+    let Ok(resp) = client.get(url).send().await else {
+        return (None, None);
+    };
+    let status = resp.status();
+    if !status.is_success() {
+        return (Some(status.as_u16()), None);
     }
-    let body = resp.bytes().await.ok()?;
-    Robot::new(robots_token(user_agent), &body).ok()
+    let body = resp
+        .bytes()
+        .await
+        .ok()
+        .map(|b| String::from_utf8_lossy(&b[..b.len().min(MAX_SITE_FILE)]).into_owned());
+    (Some(status.as_u16()), body)
+}
+
+async fn robots_file(client: &Client, url: &Url) -> (Option<u16>, Option<String>) {
+    match url.join("/robots.txt") {
+        Ok(robots) => site_file(client, robots).await,
+        Err(_) => (None, None),
+    }
+}
+
+/// Stores the robots.txt of `url`'s origin and parses it; `None` means everything is allowed.
+/// Separate from the download: a `&Connection` held across `.await` would make the crawl `!Send`.
+fn store_robots(
+    db: &Connection,
+    url: &Url,
+    (status, body): (Option<u16>, Option<String>),
+    user_agent: &str,
+) -> rusqlite::Result<Option<Robot>> {
+    db.execute(
+        "INSERT OR REPLACE INTO robots_txt (origin, status, body) VALUES (?1, ?2, ?3)",
+        params![url.origin().ascii_serialization(), status, body],
+    )?;
+    // shortcut: any non-2xx allows all, Google treats 5xx as disallow-all
+    Ok(body.and_then(|b| Robot::new(robots_token(user_agent), b.as_bytes()).ok()))
 }
 
 /// Every `<loc>` in the site's sitemaps, with the sitemap file listing it. Sitemap indexes are
@@ -1237,7 +1318,12 @@ async fn fetch(ctx: FetchCtx, url: Url, depth: Depth) -> Fetched {
                             error: None,
                         };
                         let html = match r.render(&page.url, &ctx.user_agent).await {
-                            Ok(dom) => parse_html(&page.url, &dom, &ctx.rules),
+                            Ok(dom) => {
+                                let mut html = parse_html(&page.url, &dom, &ctx.rules);
+                                // AI crawlers read the raw HTML, so that's where an empty shell matters
+                                html.geo.js_shell = raw.geo.js_shell;
+                                html
+                            }
                             Err(e) => {
                                 info.error = Some(e);
                                 parse_html(&page.url, &body, &ctx.rules)
@@ -1497,6 +1583,7 @@ fn parse_html(base: &Url, html: &str, rules: &[CustomRule]) -> HtmlData {
             .collect(),
         structured: structured_data(&doc),
         bad_links: bad_links(&doc, base),
+        geo: crate::geo::signals::signals(&doc, &words),
         custom: apply_rules(&doc, html, rules),
         // shortcut: <head> annotations only, not the HTTP Link header or sitemap xhtml:link variants
         hreflang: doc
@@ -1759,6 +1846,20 @@ mod tests {
             Some(0),
             "redirects: Content-Length of the empty body"
         );
+
+        // GEO: robots.txt and llms.txt stored, one signals row per HTML page
+        let geo = crate::geo::read(&path).unwrap();
+        let llms = geo.llms.as_ref().unwrap();
+        assert_eq!(
+            (llms.url.as_str(), llms.status),
+            (u("/llms.txt").as_str(), Some(404))
+        );
+        assert!(geo.pages.iter().any(|g| g.page == u("/a")));
+        assert!(
+            geo.pages.iter().all(|g| !g.page.contains("/private")),
+            "pages robots.txt blocks are never fetched"
+        );
+        assert!(geo.bots.iter().all(|b| b.blocked_pages == 0));
 
         // crawls saved before the X-Robots-Tag column existed still open
         Connection::open(&path)
@@ -2114,6 +2215,10 @@ mod tests {
                 word_count: 1,
                 content_hash: Some(format!("{:016x}", fnv64(b"hi"))),
                 simhash: Some(format!("{:016x}", simhash(&["hi".to_owned()]))),
+                geo: crate::geo::signals::Signals {
+                    first_para_words: 1,
+                    ..Default::default()
+                },
                 ..HtmlData::default()
             }
         );

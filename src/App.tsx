@@ -3,11 +3,15 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { DataTable, helperFor } from "./DataTable";
 import { DetailPanel } from "./DetailPanel";
+import { ImagePanel } from "./ImagePanel";
 import {
   BROKEN_FILTERS,
   CHECKS,
   CODE_FILTERS,
+  IMAGE_FILTERS,
+  LARGE_IMAGE_BYTES,
   codeLabel,
+  formatBytes,
   kindOf,
   statusFilters,
   indexFilters,
@@ -19,6 +23,7 @@ import {
   type BrokenLink,
   type Check,
   type ExternalLink,
+  type ImageRow,
   type MetaRow,
   type Page,
 } from "./pages";
@@ -114,6 +119,29 @@ const brokenColumns = broke.columns([
   broke.accessor((b) => (b.external ? "Esterno" : "Interno"), { id: "kind", header: "Tipo", size: 90 }),
 ]);
 
+const img = helperFor<ImageRow>();
+const imageColumns = img.columns([
+  img.accessor("src", { header: "Immagine", size: 460 }),
+  img.accessor((i) => codeLabel(i.status, i.error), {
+    id: "status",
+    header: "Stato",
+    size: 130,
+    cell: (c) => codeCell(c.row.original.status, c.row.original.error),
+  }),
+  img.accessor("bytes", {
+    header: "Peso (byte)",
+    size: 110,
+    cell: (c) => (
+      <span className={`num${(c.getValue() ?? 0) > LARGE_IMAGE_BYTES ? " heavy" : ""}`}>{formatBytes(c.getValue())}</span>
+    ),
+  }),
+  img.accessor("alt", { header: "Alt text", size: 260 }),
+  img.accessor("pages", { header: "Pagine", size: 80, cell: (c) => num(c.getValue()) }),
+  img.accessor("missing_alt", { header: "Alt mancante", size: 115, cell: (c) => num(c.getValue()) }),
+  img.accessor("missing_size", { header: "Senza dimensioni", size: 140, cell: (c) => num(c.getValue()) }),
+  img.accessor("content_type", { header: "Content type", size: 140 }),
+]);
+
 const meta = helperFor<MetaRow>();
 const metaTabs = CHECKS.map((check) => ({
   check,
@@ -126,13 +154,14 @@ const metaTabs = CHECKS.map((check) => ({
   ]),
 }));
 
-type Tab = "internal" | "codes" | "index" | "external" | "broken" | Check["field"];
+type Tab = "internal" | "codes" | "index" | "external" | "broken" | "images" | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
   { id: "internal", label: "Interni" },
   { id: "codes", label: "Codici di risposta" },
   { id: "index", label: "Indicizzabilità" },
   { id: "external", label: "Link esterni" },
   { id: "broken", label: "Link rotti" },
+  { id: "images", label: "Immagini" },
   ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
 ];
 
@@ -140,9 +169,20 @@ const fmt = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
 const when = new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" });
 
 /** Mirror the Rust structs in src-tauri/src/lib.rs and crawler.rs. */
-type CrawlData = { path: string; pages: Page[]; external: ExternalLink[]; broken: BrokenLink[] };
+type CrawlData = {
+  path: string;
+  pages: Page[];
+  external: ExternalLink[];
+  broken: BrokenLink[];
+  images: ImageRow[];
+};
 type CrawlSummary = { path: string; start_url: string | null; pages: number; modified_ms: number };
-type Progress = { stage: "pages" | "external"; done: number; pending: number };
+type Progress = { stage: "pages" | "external" | "images"; done: number; pending: number };
+const STAGE_LABEL: Record<Progress["stage"], string> = {
+  pages: "URL analizzati",
+  external: "Link esterni verificati",
+  images: "Immagini verificate",
+};
 
 const SQLITE_FILTER = [{ name: "Crawl CyberFrog", extensions: ["sqlite"] }];
 
@@ -152,6 +192,8 @@ export default function App() {
   const [external, setExternal] = useState<ExternalLink[]>([]);
   const [broken, setBroken] = useState<BrokenLink[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [images, setImages] = useState<ImageRow[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [crawlPath, setCrawlPath] = useState<string | null>(null);
   const [recent, setRecent] = useState<CrawlSummary[]>([]);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -170,7 +212,9 @@ export default function App() {
     setPages(data.pages);
     setExternal(data.external);
     setBroken(data.broken);
+    setImages(data.images);
     setSelected(null);
+    setSelectedImage(null);
     setCrawlPath(data.path);
     if (data.pages[0]) setUrl(data.pages[0].url);
   }
@@ -292,7 +336,7 @@ export default function App() {
           <h1>Scansione in corso…</h1>
           <p className="big-number">{(progress?.done ?? 0).toLocaleString("it-IT")}</p>
           <p>
-            {progress?.stage === "external" ? "Link esterni verificati" : "URL analizzati"}
+            {STAGE_LABEL[progress?.stage ?? "pages"]}
             {progress && progress.pending > 0 && ` · ${progress.pending.toLocaleString("it-IT")} in coda`}
           </p>
         </section>
@@ -401,7 +445,29 @@ export default function App() {
                 {...selectByUrl}
               />
             )}
-            {selected && crawlPath && (
+            {tab === "images" && (
+              <DataTable
+                key="images"
+                data={images}
+                columns={imageColumns}
+                filters={IMAGE_FILTERS}
+                exportName={`${host}-immagini`}
+                onRowClick={(i) => setSelectedImage(i.src)}
+                isSelected={(i) => i.src === selectedImage}
+              />
+            )}
+            {tab === "images" && selectedImage && crawlPath && (
+              <ImagePanel
+                crawlPath={crawlPath}
+                src={selectedImage}
+                onClose={() => setSelectedImage(null)}
+                onOpenPage={(page) => {
+                  setSelected(page);
+                  setTab("internal");
+                }}
+              />
+            )}
+            {tab !== "images" && selected && crawlPath && (
               <DetailPanel
                 crawlPath={crawlPath}
                 url={selected}

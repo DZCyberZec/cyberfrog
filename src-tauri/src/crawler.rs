@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use reqwest::header::{CONTENT_TYPE, LOCATION};
+use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE, LOCATION};
 use reqwest::{Client, redirect::Policy};
 use rusqlite::{Connection, OpenFlags, params};
 use scraper::{Html, Selector};
@@ -26,6 +26,8 @@ pub struct Config {
     pub max_urls: usize,
     /// After the crawl, request every linked external URL once to record its status.
     pub check_external: bool,
+    /// After the crawl, request every image once to record its status and weight.
+    pub check_images: bool,
 }
 
 struct Fetched {
@@ -51,6 +53,17 @@ struct HtmlData {
     meta_robots: Option<String>,
     word_count: u32,
     links: Vec<Link>,
+    images: Vec<Image>,
+}
+
+/// An `<img src>` found in a page.
+#[derive(Debug, PartialEq)]
+struct Image {
+    src: Url,
+    /// `None` when the attribute is absent; `Some("")` marks a decorative image.
+    alt: Option<String>,
+    /// Both width and height attributes are set, so the browser can reserve space.
+    has_size: bool,
 }
 
 /// An `<a href>` found in a page.
@@ -100,6 +113,8 @@ pub enum Stage {
     Pages,
     /// Checking the status of linked external URLs.
     External,
+    /// Checking status and weight of images.
+    Images,
 }
 
 /// Opens an existing crawl without creating or changing anything in the file.
@@ -186,6 +201,21 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              PRIMARY KEY (source, target)
          ) WITHOUT ROWID;
          CREATE INDEX IF NOT EXISTS links_target ON links (target);
+         CREATE TABLE IF NOT EXISTS images (
+             page     TEXT NOT NULL,
+             src      TEXT NOT NULL,
+             alt      TEXT,
+             has_size INTEGER NOT NULL,
+             PRIMARY KEY (page, src)
+         ) WITHOUT ROWID;
+         CREATE INDEX IF NOT EXISTS images_src ON images (src);
+         CREATE TABLE IF NOT EXISTS image_info (
+             src          TEXT PRIMARY KEY,
+             status       INTEGER,
+             bytes        INTEGER,
+             content_type TEXT,
+             error        TEXT
+         );
          CREATE TABLE IF NOT EXISTS external (
              url          TEXT PRIMARY KEY,
              status       INTEGER,
@@ -313,6 +343,17 @@ pub async fn crawl(
                     false
                 ])?;
             }
+            let mut insert_img = tx.prepare_cached(
+                "INSERT OR IGNORE INTO images (page, src, alt, has_size) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            for img in &html.images {
+                insert_img.execute(params![
+                    page.url.as_str(),
+                    img.src.as_str(),
+                    img.alt,
+                    img.has_size
+                ])?;
+            }
             for link in &external {
                 insert.execute(params![
                     page.url.as_str(),
@@ -353,7 +394,60 @@ pub async fn crawl(
         )
         .await?;
     }
+    if cfg.check_images {
+        check_images(
+            &client,
+            &mut db,
+            concurrency,
+            cfg.max_urls,
+            &mut on_progress,
+        )
+        .await?;
+    }
     Ok(written)
+}
+
+/// Runs `check` on every URL with bounded concurrency, storing each result as it arrives.
+async fn check_all<T, Fut>(
+    urls: Vec<String>,
+    concurrency: usize,
+    stage: Stage,
+    on_progress: &mut (impl FnMut(Progress) + Send),
+    check: impl Fn(String) -> Fut,
+    mut store: impl FnMut(T) -> rusqlite::Result<()>,
+) -> CrawlResult<()>
+where
+    T: Send + 'static,
+    Fut: Future<Output = T> + Send + 'static,
+{
+    let total = urls.len();
+    let mut queue = urls.into_iter();
+    let mut tasks = JoinSet::new();
+    let mut done = 0;
+    loop {
+        while tasks.len() < concurrency
+            && let Some(url) = queue.next()
+        {
+            tasks.spawn(check(url));
+        }
+        let Some(joined) = tasks.join_next().await else {
+            break;
+        };
+        store(joined?)?;
+        done += 1;
+        on_progress(Progress {
+            stage,
+            done,
+            pending: total - done,
+        });
+    }
+    Ok(())
+}
+
+fn distinct(db: &Connection, sql: &str, max: usize) -> rusqlite::Result<Vec<String>> {
+    db.prepare(sql)?
+        .query_map([max as i64], |r| r.get(0))?
+        .collect()
 }
 
 /// Requests each external link target once and stores its status in `external`.
@@ -364,36 +458,98 @@ async fn check_external(
     max: usize,
     on_progress: &mut (impl FnMut(Progress) + Send),
 ) -> CrawlResult<()> {
-    let targets: Vec<String> = db
-        .prepare("SELECT DISTINCT target FROM links WHERE external = 1 ORDER BY target LIMIT ?1")?
-        .query_map([max as i64], |r| r.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    let total = targets.len();
-    let mut queue = targets.into_iter();
-    let mut tasks = JoinSet::new();
-    let mut done = 0;
-    loop {
-        while tasks.len() < concurrency
-            && let Some(url) = queue.next()
-        {
-            tasks.spawn(status_of(client.clone(), url));
-        }
-        let Some(joined) = tasks.join_next().await else {
-            break;
-        };
-        let (url, status, content_type, error) = joined?;
-        db.execute(
-            "INSERT OR REPLACE INTO external (url, status, content_type, error) VALUES (?1, ?2, ?3, ?4)",
-            params![url, status, content_type, error],
-        )?;
-        done += 1;
-        on_progress(Progress {
-            stage: Stage::External,
-            done,
-            pending: total - done,
-        });
+    let urls = distinct(
+        db,
+        "SELECT DISTINCT target FROM links WHERE external = 1 ORDER BY target LIMIT ?1",
+        max,
+    )?;
+    check_all(
+        urls,
+        concurrency,
+        Stage::External,
+        on_progress,
+        |url| status_of(client.clone(), url),
+        move |(url, status, content_type, error)| {
+            db.execute(
+                "INSERT OR REPLACE INTO external (url, status, content_type, error) VALUES (?1, ?2, ?3, ?4)",
+                params![url, status, content_type, error],
+            )
+            .map(drop)
+        },
+    )
+    .await
+}
+
+/// Requests each image once and stores its status and weight in `image_info`.
+async fn check_images(
+    client: &Client,
+    db: &mut Connection,
+    concurrency: usize,
+    max: usize,
+    on_progress: &mut (impl FnMut(Progress) + Send),
+) -> CrawlResult<()> {
+    let urls = distinct(
+        db,
+        "SELECT DISTINCT src FROM images ORDER BY src LIMIT ?1",
+        max,
+    )?;
+    check_all(
+        urls,
+        concurrency,
+        Stage::Images,
+        on_progress,
+        |url| image_info(client.clone(), url),
+        move |(src, status, bytes, content_type, error)| {
+            db.execute(
+                "INSERT OR REPLACE INTO image_info (src, status, bytes, content_type, error)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![src, status, bytes, content_type, error],
+            )
+            .map(drop)
+        },
+    )
+    .await
+}
+
+type ImageInfo = (
+    String,
+    Option<u16>,
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+);
+
+/// Status and size in bytes: from HEAD's Content-Length when present, otherwise by downloading it.
+async fn image_info(client: Client, url: String) -> ImageInfo {
+    if let Ok(r) = client.head(&url).send().await
+        && r.status().as_u16() < 400
+        && let Some(len) = header(&r, CONTENT_LENGTH).and_then(|l| l.parse().ok())
+    {
+        return (
+            url,
+            Some(r.status().as_u16()),
+            Some(len),
+            header(&r, CONTENT_TYPE),
+            None,
+        );
     }
-    Ok(())
+    match client.get(&url).send().await {
+        Ok(r) => {
+            let status = r.status().as_u16();
+            let content_type = header(&r, CONTENT_TYPE);
+            match r.bytes().await {
+                Ok(body) => (
+                    url,
+                    Some(status),
+                    Some(body.len() as i64),
+                    content_type,
+                    None,
+                ),
+                Err(e) => (url, Some(status), None, content_type, Some(e.to_string())),
+            }
+        }
+        Err(e) => (url, None, None, None, Some(e.to_string())),
+    }
 }
 
 /// HEAD first; any HEAD error status or failure is confirmed with GET, since some servers
@@ -500,6 +656,7 @@ static META: LazyLock<Selector> = LazyLock::new(|| selector("meta[name][content]
 static LINK_REL: LazyLock<Selector> = LazyLock::new(|| selector("link[rel][href]"));
 static BODY: LazyLock<Selector> = LazyLock::new(|| selector("body"));
 static IMG_ALT: LazyLock<Selector> = LazyLock::new(|| selector("img[alt]"));
+static IMG: LazyLock<Selector> = LazyLock::new(|| selector("img[src]"));
 
 // shortcut: ignores <base href>, add it when a site needs it
 fn parse_html(base: &Url, html: &str) -> HtmlData {
@@ -540,6 +697,21 @@ fn parse_html(base: &Url, html: &str) -> HtmlData {
                         .find_map(|img| squash(img.value().attr("alt")))
                 });
                 Some(Link { url, anchor })
+            })
+            .collect(),
+        // shortcut: only `src`, not srcset or <picture><source>; add them when a site relies on them
+        images: doc
+            .select(&IMG)
+            .filter_map(|img| {
+                let e = img.value();
+                let src = base.join(e.attr("src")?.trim()).ok()?;
+                matches!(src.scheme(), "http" | "https").then(|| Image {
+                    src: normalize(src),
+                    alt: e
+                        .attr("alt")
+                        .map(|a| a.split_whitespace().collect::<Vec<_>>().join(" ")),
+                    has_size: e.attr("width").is_some() && e.attr("height").is_some(),
+                })
             })
             .collect(),
     }
@@ -682,6 +854,7 @@ mod tests {
             concurrency: 4,
             max_urls: 100,
             check_external: false,
+            check_images: false,
         };
 
         let mut progress = Vec::new();
@@ -750,6 +923,7 @@ mod tests {
             concurrency: 4,
             max_urls: 100,
             check_external: false,
+            check_images: false,
         };
         crawl(cfg, &path, |_| {}).await.unwrap();
 
@@ -882,6 +1056,7 @@ mod tests {
             concurrency: 4,
             max_urls: 100,
             check_external: true,
+            check_images: false,
         };
         let mut progress = Vec::new();
         crawl(cfg, &path, |p| progress.push(p)).await.unwrap();
@@ -971,6 +1146,106 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn records_images_with_alt_size_and_weight() {
+        const HTML: &str = "Content-Type: text/html\r\n";
+        let big = "x".repeat(150_000);
+        let site = serve_with(move |method, path| match (method, path) {
+            (_, "/") => http(
+                "200 OK",
+                HTML,
+                r#"<img src="/logo.png" alt=" Logo  CyberZec " width="10" height="10">
+                   <img src="/big.jpg"><img src="data:image/png;base64,AAAA" alt="inline">
+                   <a href="/b">b</a>"#,
+            ),
+            (_, "/b") => http(
+                "200 OK",
+                HTML,
+                r#"<img src="/logo.png" alt=""><img src="/gone.png" alt="x" width="1">"#,
+            ),
+            (_, "/logo.png") => http("200 OK", "Content-Type: image/png\r\n", "0123456789"),
+            // HEAD without Content-Length forces a download to learn the weight
+            ("HEAD", "/big.jpg") => {
+                "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nConnection: close\r\n\r\n".into()
+            }
+            (_, "/big.jpg") => http("200 OK", "Content-Type: image/jpeg\r\n", &big),
+            _ => http("404 Not Found", HTML, "nope"),
+        })
+        .await;
+        let path = db_path("images");
+        let cfg = Config {
+            start: site.clone(),
+            concurrency: 4,
+            max_urls: 100,
+            check_external: false,
+            check_images: true,
+        };
+        let mut progress = Vec::new();
+        crawl(cfg, &path, |p| progress.push(p)).await.unwrap();
+        assert_eq!(
+            progress.last(),
+            Some(&Progress {
+                stage: Stage::Images,
+                done: 3,
+                pending: 0
+            })
+        );
+
+        let s = |p: &str| site.join(p).unwrap().to_string();
+        let images: Vec<_> = report::read_images(&path)
+            .unwrap()
+            .into_iter()
+            .map(|i| {
+                (
+                    i.src,
+                    i.status,
+                    i.bytes,
+                    i.pages,
+                    i.missing_alt,
+                    i.empty_alt,
+                    i.missing_size,
+                    i.alt,
+                )
+            })
+            .collect();
+        assert_eq!(
+            images,
+            vec![
+                (s("/big.jpg"), Some(200), Some(150_000), 1, 1, 0, 1, None),
+                (
+                    s("/gone.png"),
+                    Some(404),
+                    Some(4),
+                    1,
+                    0,
+                    0,
+                    1,
+                    Some("x".to_owned())
+                ),
+                (
+                    s("/logo.png"),
+                    Some(200),
+                    Some(10),
+                    2,
+                    0,
+                    1,
+                    1,
+                    Some("Logo CyberZec".to_owned())
+                ),
+            ]
+        );
+        let uses = report::image_pages(&path, &s("/logo.png")).unwrap();
+        assert_eq!(
+            uses.iter()
+                .map(|u| (u.page.as_str(), u.alt.as_deref(), u.has_size))
+                .collect::<Vec<_>>(),
+            vec![
+                (s("/").as_str(), Some("Logo CyberZec"), true),
+                (s("/b").as_str(), Some(""), false)
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn stops_at_max_urls() {
         let base = serve().await;
         let path = db_path("limit");
@@ -979,6 +1254,7 @@ mod tests {
             concurrency: 2,
             max_urls: 2,
             check_external: false,
+            check_images: false,
         };
 
         assert_eq!(crawl(cfg, &path, |_| {}).await.unwrap(), 2);

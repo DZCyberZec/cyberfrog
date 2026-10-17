@@ -1,7 +1,7 @@
 // Self-check for filters and CSV export. Run: node scripts/pages.check.ts
 import assert from "node:assert/strict";
 import {
-  BROKEN_FILTERS, CHECKS, CODE_FILTERS, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
+  BROKEN_FILTERS, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
 } from "../src/pages.ts";
 
 const base: Page = {
@@ -83,4 +83,17 @@ const broken = [
 assert.deepEqual(pick(broken, BROKEN_FILTERS, "external"), ["x/500", "x/dns"]);
 assert.deepEqual(pick(broken, BROKEN_FILTERS, "client"), ["/in404"]);
 assert.deepEqual(pick(broken, BROKEN_FILTERS, "none"), ["x/dns"]);
+const img = { status: 200, bytes: 1000, content_type: null, error: null, pages: 1, missing_alt: 0, empty_alt: 0, missing_size: 0, alt: "a" };
+const imgs = [
+  { ...img, src: "light" },
+  { ...img, src: "heavy", bytes: 102401 },
+  { ...img, src: "edge", bytes: 102400 },
+  { ...img, src: "noalt", missing_alt: 2, alt: null },
+  { ...img, src: "broken", status: 404 },
+  { ...img, src: "unreachable", status: null, bytes: null },
+].map((i) => ({ ...i, url: i.src }));
+assert.deepEqual(pick(imgs, IMAGE_FILTERS, "large"), ["heavy"], "exactly 100 KB is not over");
+assert.deepEqual(pick(imgs, IMAGE_FILTERS, "missing-alt"), ["noalt"]);
+assert.deepEqual(pick(imgs, IMAGE_FILTERS, "errors"), ["broken", "unreachable"]);
+assert.deepEqual([formatBytes(850), formatBytes(12595), formatBytes(1468006), formatBytes(null)], ["850 B", "12,3 KB", "1,4 MB", ""]);
 console.log("pages.check: ok");

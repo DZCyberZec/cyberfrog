@@ -148,3 +148,75 @@ pub fn page_links(path: &Path, url: &str) -> rusqlite::Result<PageLinks> {
         ))?,
     })
 }
+
+/// One image, with how the pages that show it describe it.
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct ImageRow {
+    pub src: String,
+    pub status: Option<u16>,
+    pub bytes: Option<i64>,
+    pub content_type: Option<String>,
+    pub error: Option<String>,
+    /// Crawled pages showing it.
+    pub pages: u32,
+    /// Pages where the `alt` attribute is absent.
+    pub missing_alt: u32,
+    /// Pages where `alt=""` marks it as decorative.
+    pub empty_alt: u32,
+    /// Pages where width or height is not set.
+    pub missing_size: u32,
+    /// A non-empty alt text used for it, if any.
+    pub alt: Option<String>,
+}
+
+/// How one page uses an image.
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct ImageUse {
+    pub page: String,
+    pub alt: Option<String>,
+    pub has_size: bool,
+}
+
+pub fn read_images(path: &Path) -> rusqlite::Result<Vec<ImageRow>> {
+    let db = open_existing(path)?;
+    if !compiles(&db, "SELECT 1 FROM images, image_info LIMIT 0") {
+        return Ok(Vec::new());
+    }
+    let mut stmt = db.prepare(
+        "SELECT i.src, info.status, info.bytes, info.content_type, info.error, count(*),
+                sum(i.alt IS NULL), sum(i.alt IS ''), sum(NOT i.has_size), max(nullif(i.alt, ''))
+         FROM images i LEFT JOIN image_info info ON info.src = i.src
+         GROUP BY i.src ORDER BY i.src",
+    )?;
+    stmt.query_map([], |r| {
+        Ok(ImageRow {
+            src: r.get(0)?,
+            status: r.get(1)?,
+            bytes: r.get(2)?,
+            content_type: r.get(3)?,
+            error: r.get(4)?,
+            pages: r.get(5)?,
+            missing_alt: r.get(6)?,
+            empty_alt: r.get(7)?,
+            missing_size: r.get(8)?,
+            alt: r.get(9)?,
+        })
+    })?
+    .collect()
+}
+
+pub fn image_pages(path: &Path, src: &str) -> rusqlite::Result<Vec<ImageUse>> {
+    let db = open_existing(path)?;
+    if !compiles(&db, "SELECT src FROM images LIMIT 0") {
+        return Ok(Vec::new());
+    }
+    db.prepare("SELECT page, alt, has_size FROM images WHERE src = ?1 ORDER BY page")?
+        .query_map(params![src], |r| {
+            Ok(ImageUse {
+                page: r.get(0)?,
+                alt: r.get(1)?,
+                has_size: r.get(2)?,
+            })
+        })?
+        .collect()
+}

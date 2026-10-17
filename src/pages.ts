@@ -37,6 +37,20 @@ export type BrokenLink = {
 };
 export type LinkRow = { url: string; anchor: string | null; status: number | null; external: boolean };
 export type PageLinks = { inlinks: LinkRow[]; outlinks: LinkRow[] };
+/** Mirrors `report::ImageRow` and `report::ImageUse`. */
+export type ImageRow = {
+  src: string;
+  status: number | null;
+  bytes: number | null;
+  content_type: string | null;
+  error: string | null;
+  pages: number;
+  missing_alt: number;
+  empty_alt: number;
+  missing_size: number;
+  alt: string | null;
+};
+export type ImageUse = { page: string; alt: string | null; has_size: boolean };
 
 export type MetaField = "title" | "meta_description" | "h1";
 
@@ -214,4 +228,26 @@ export function indexFilters(pages: Page[]): FilterDef<Page>[] {
     },
     { id: "x-robots", label: "X-Robots-Tag presente", test: (p) => p.x_robots_tag !== null },
   ];
+}
+
+/** Images heavier than this are flagged; 100 KB is the usual SEO-audit threshold. */
+export const LARGE_IMAGE_BYTES = 100 * 1024;
+
+export const IMAGE_FILTERS: FilterDef<ImageRow>[] = [
+  { id: "all", label: "Tutte", test: () => true },
+  { id: "large", label: "Oltre 100 KB", test: (i) => (i.bytes ?? 0) > LARGE_IMAGE_BYTES },
+  { id: "missing-alt", label: "Alt mancante", test: (i) => i.missing_alt > 0 },
+  { id: "empty-alt", label: "Alt vuoto (decorative)", test: (i) => i.empty_alt > 0 },
+  { id: "no-size", label: "Senza width/height", test: (i) => i.missing_size > 0 },
+  { id: "errors", label: "Errori", test: (i) => i.status === null || i.status >= 400 },
+];
+
+const kb = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
+
+/** "850 B", "12,3 KB", "1,4 MB". */
+export function formatBytes(n: number | null): string {
+  if (n === null) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${kb.format(n / 1024)} KB`;
+  return `${kb.format(n / 1024 / 1024)} MB`;
 }

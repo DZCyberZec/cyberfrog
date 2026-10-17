@@ -9,7 +9,7 @@ use tauri::ipc::Channel;
 use url::Url;
 
 use crawler::{Config, Page, Progress};
-use report::{BrokenLink, ExternalLink, PageLinks};
+use report::{BrokenLink, ExternalLink, ImageRow, ImageUse, PageLinks};
 
 // shortcut: fixed limits, expose them in the UI when crawl settings land
 const CONCURRENCY: usize = 8;
@@ -23,6 +23,7 @@ struct CrawlData {
     pages: Vec<Page>,
     external: Vec<ExternalLink>,
     broken: Vec<BrokenLink>,
+    images: Vec<ImageRow>,
 }
 
 #[derive(serde::Serialize)]
@@ -51,6 +52,7 @@ fn load(path: &Path) -> Result<CrawlData, String> {
         pages: crawler::read_pages(path).map_err(unreadable)?,
         external: report::read_external(path).map_err(unreadable)?,
         broken: report::read_broken(path).map_err(unreadable)?,
+        images: report::read_images(path).map_err(unreadable)?,
     })
 }
 
@@ -76,6 +78,7 @@ async fn start_crawl(
         concurrency: CONCURRENCY,
         max_urls: MAX_URLS,
         check_external: true,
+        check_images: true,
     };
     crawler::crawl(cfg, &db_path, |p| {
         let _ = on_progress.send(p); // a closed window just stops listening
@@ -93,6 +96,11 @@ fn open_crawl(path: String) -> Result<CrawlData, String> {
 #[tauri::command]
 fn page_links(path: String, url: String) -> Result<PageLinks, String> {
     report::page_links(Path::new(&path), &url).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn image_pages(path: String, src: String) -> Result<Vec<ImageUse>, String> {
+    report::image_pages(Path::new(&path), &src).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -147,6 +155,7 @@ pub fn run() {
             start_crawl,
             open_crawl,
             page_links,
+            image_pages,
             save_crawl_as,
             list_crawls,
             write_text_file

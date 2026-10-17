@@ -162,6 +162,7 @@ button { font: inherit; }
 }
 .detail-head { display: flex; align-items: center; gap: 12px; padding-right: 8px; border-bottom: 1px solid var(--border); }
 .detail-head .tabs { border-bottom: 0; }
+.detail-head .tab-static { display: inline-block; padding: 10px 12px; font-weight: 600; border-bottom: 2px solid var(--accent); }
 .detail-head .tabs .count { color: var(--muted); background: var(--sunken); }
 .detail-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .detail .close {
@@ -206,6 +207,7 @@ button { font: inherit; }
 .grid tbody tr.clickable { cursor: pointer; }
 .grid tbody tr.selected td, .grid tbody tr.selected:hover td { background: var(--accent-soft); }
 .num { display: block; text-align: right; font-variant-numeric: tabular-nums; }
+.num.heavy { color: var(--client); font-weight: 600; }
 .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
 
 .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }

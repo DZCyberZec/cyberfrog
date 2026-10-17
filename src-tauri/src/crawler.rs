@@ -31,6 +31,8 @@ struct Fetched {
     depth: u32,
     status: Option<u16>,
     content_type: Option<String>,
+    /// All X-Robots-Tag header values, comma-joined.
+    x_robots_tag: Option<String>,
     redirect_to: Option<Url>,
     /// `None` unless the response was HTML and its body was read.
     html: Option<HtmlData>,
@@ -64,6 +66,7 @@ pub struct Page {
     pub canonical: Option<String>,
     pub meta_robots: Option<String>,
     pub word_count: Option<u32>,
+    pub x_robots_tag: Option<String>,
     /// Distinct crawled pages linking here with `<a href>`, self-links excluded.
     pub inlinks: u32,
 }
@@ -86,12 +89,18 @@ fn open_existing(path: &Path) -> rusqlite::Result<Connection> {
 /// All pages, in crawl order.
 pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
     let db = open_existing(path)?;
-    let mut stmt = db.prepare(
+    // crawls saved before X-Robots-Tag was recorded lack the column; read them as "no header"
+    let x_robots = if db.prepare("SELECT x_robots_tag FROM pages LIMIT 0").is_ok() {
+        "x_robots_tag"
+    } else {
+        "NULL"
+    };
+    let mut stmt = db.prepare(&format!(
         "SELECT url, depth, status, content_type, redirect_to, blocked_by_robots, error,
                 title, meta_description, h1, canonical, meta_robots, word_count,
-                (SELECT count(*) FROM links WHERE target = pages.url)
-         FROM pages ORDER BY rowid",
-    )?;
+                (SELECT count(*) FROM links WHERE target = pages.url), {x_robots}
+         FROM pages ORDER BY rowid"
+    ))?;
     stmt.query_map([], |r| {
         Ok(Page {
             url: r.get(0)?,
@@ -108,6 +117,7 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
             meta_robots: r.get(11)?,
             word_count: r.get(12)?,
             inlinks: r.get(13)?,
+            x_robots_tag: r.get(14)?,
         })
     })?
     .collect()
@@ -130,7 +140,8 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              h1                TEXT,
              canonical         TEXT,
              meta_robots       TEXT,
-             word_count        INTEGER
+             word_count        INTEGER,
+             x_robots_tag      TEXT
          );
          CREATE TABLE IF NOT EXISTS links (
              source TEXT NOT NULL,
@@ -224,8 +235,8 @@ pub async fn crawl(
         let tx = db.transaction()?;
         tx.execute(
             "INSERT OR IGNORE INTO pages (url, depth, status, content_type, redirect_to, error,
-                 title, meta_description, h1, canonical, meta_robots, word_count)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                 title, meta_description, h1, canonical, meta_robots, word_count, x_robots_tag)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 page.url.as_str(),
                 page.depth,
@@ -239,6 +250,7 @@ pub async fn crawl(
                 html.canonical.as_ref().map(Url::as_str),
                 html.meta_robots,
                 is_html.then_some(html.word_count),
+                page.x_robots_tag,
             ],
         )?;
         {
@@ -299,6 +311,7 @@ async fn fetch(client: Client, url: Url, depth: u32) -> Fetched {
         depth,
         status: None,
         content_type: None,
+        x_robots_tag: None,
         redirect_to: None,
         html: None,
         error: None,
@@ -312,6 +325,13 @@ async fn fetch(client: Client, url: Url, depth: u32) -> Fetched {
     };
     page.status = Some(resp.status().as_u16());
     page.content_type = header(&resp, CONTENT_TYPE);
+    let x_robots: Vec<&str> = resp
+        .headers()
+        .get_all("x-robots-tag")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .collect();
+    page.x_robots_tag = (!x_robots.is_empty()).then(|| x_robots.join(", "));
     if resp.status().is_redirection() {
         page.redirect_to = header(&resp, LOCATION).and_then(|l| page.url.join(&l).ok());
         return page;
@@ -434,7 +454,11 @@ mod tests {
                 r#"<a href="/">h</a><a href="/missing">m</a><a href="/a#s">s</a>"#,
             ),
             "/old" => ("301 Moved Permanently", "Location: /new\r\n", ""),
-            "/new" => ("200 OK", "Content-Type: text/html\r\n", "<p>no links</p>"),
+            "/new" => (
+                "200 OK",
+                "Content-Type: text/html\r\nX-Robots-Tag: noindex\r\nX-Robots-Tag: googlebot: nofollow\r\n",
+                "<p>no links</p>",
+            ),
             _ => ("404 Not Found", "Content-Type: text/html\r\n", "nope"),
         };
         format!(
@@ -515,6 +539,31 @@ mod tests {
                 (u("/private/x"), 1, None, None, true, 1),
             ]
         );
+        let pages = read_pages(&path).unwrap();
+        let x_robots = |p: &str| {
+            pages
+                .iter()
+                .find(|pg| pg.url == u(p))
+                .unwrap()
+                .x_robots_tag
+                .clone()
+        };
+        assert_eq!(
+            x_robots("/new").as_deref(),
+            Some("noindex, googlebot: nofollow")
+        );
+        assert_eq!(x_robots("/a"), None);
+
+        // crawls saved before the X-Robots-Tag column existed still open
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("ALTER TABLE pages DROP COLUMN x_robots_tag;")
+            .unwrap();
+        let old = read_pages(&path).unwrap();
+        assert_eq!(old.len(), 6);
+        assert!(old.iter().all(|p| p.x_robots_tag.is_none()));
+        assert!(summary(&path).is_ok());
+
         let done: Vec<usize> = progress.iter().map(|p| p.done).collect();
         assert_eq!(
             done,

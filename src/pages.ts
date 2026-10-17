@@ -14,6 +14,7 @@ export type Page = {
   meta_robots: string | null;
   word_count: number | null;
   inlinks: number;
+  x_robots_tag: string | null;
 };
 
 export type MetaField = "title" | "meta_description" | "h1";
@@ -105,4 +106,62 @@ export function toCsv(header: string[], rows: unknown[][]): string {
     return /[";\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return "﻿" + [header, ...rows].map((r) => r.map(cell).join(";")).join("\r\n") + "\r\n";
+}
+
+/** Robots directives from the meta tag and the X-Robots-Tag header combined. */
+// shortcut: agent-scoped values like "googlebot: noindex" count for every crawler, scope them if it matters
+export function directives(p: Page): { noindex: boolean; nofollow: boolean } {
+  const all = `${p.meta_robots ?? ""},${p.x_robots_tag ?? ""}`.toLowerCase();
+  const has = (d: string) => new RegExp(`(^|[\\s,:])${d}($|[\\s,])`).test(all);
+  return { noindex: has("noindex") || has("none"), nofollow: has("nofollow") || has("none") };
+}
+
+/** Canonical pointing to a different URL than the page itself. */
+export function isCanonicalised(p: Page): boolean {
+  return p.canonical !== null && p.canonical !== p.url;
+}
+
+/** Why a URL can't be indexed, or null when it can. First matching reason wins. */
+export function nonIndexableReason(p: Page): string | null {
+  switch (statusKind(p)) {
+    case "blocked":
+      return "Bloccato da robots.txt";
+    case "none":
+      return "Nessuna risposta";
+    case "redirect":
+      return "Redirect";
+    case "client":
+      return "Errore client (4xx)";
+    case "server":
+      return "Errore server (5xx)";
+  }
+  if (directives(p).noindex) return "Noindex";
+  if (isCanonicalised(p)) return "Canonicalizzata";
+  return null;
+}
+
+/** Indexability filters; `pages` lets canonical targets be checked against what was crawled. */
+export function indexFilters(pages: Page[]): FilterDef<Page>[] {
+  const byUrl = new Map(pages.map((p) => [p.url, p]));
+  const html = (p: Page) => isHtmlPage(p);
+  return [
+    { id: "all", label: "Tutti", test: () => true },
+    { id: "indexable", label: "Indicizzabili", test: (p) => nonIndexableReason(p) === null },
+    { id: "non-indexable", label: "Non indicizzabili", test: (p) => nonIndexableReason(p) !== null },
+    { id: "noindex", label: "Noindex", test: (p) => directives(p).noindex },
+    { id: "nofollow", label: "Nofollow", test: (p) => directives(p).nofollow },
+    { id: "canonicalised", label: "Canonicalizzate", test: (p) => isCanonicalised(p) },
+    { id: "self", label: "Canonical auto-referenziale", test: (p) => p.canonical === p.url },
+    { id: "no-canonical", label: "Canonical mancante", test: (p) => html(p) && p.canonical === null },
+    {
+      id: "bad-canonical",
+      label: "Canonical verso URL non 200",
+      test: (p) => {
+        if (!isCanonicalised(p)) return false;
+        const target = byUrl.get(p.canonical!);
+        return target !== undefined && target.status !== 200; // uncrawled targets (other hosts) are not judged
+      },
+    },
+    { id: "x-robots", label: "X-Robots-Tag presente", test: (p) => p.x_robots_tag !== null },
+  ];
 }

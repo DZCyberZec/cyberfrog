@@ -5,7 +5,9 @@ import { DataTable, helperFor } from "./DataTable";
 import {
   CHECKS,
   CODE_FILTERS,
+  indexFilters,
   metaFilters,
+  nonIndexableReason,
   metaRows,
   statusKind,
   statusLabel,
@@ -24,14 +26,28 @@ const statusColumn = page.accessor(statusLabel, {
   size: 150,
   cell: (c) => <span className={`badge ${statusKind(c.row.original)}`}>{c.getValue()}</span>,
 });
+const indexableColumn = page.accessor((p) => (nonIndexableReason(p) === null ? "Sì" : "No"), {
+  id: "indexable",
+  header: "Indicizzabile",
+  size: 115,
+  cell: (c) => <span className={`badge ${c.getValue() === "Sì" ? "ok" : "client"}`}>{c.getValue()}</span>,
+});
+const reasonColumn = page.accessor((p) => nonIndexableReason(p) ?? "", {
+  id: "reason",
+  header: "Motivo",
+  size: 190,
+});
 const internalColumns = page.columns([
   page.accessor("url", { header: "URL", size: 420 }),
   statusColumn,
+  indexableColumn,
+  reasonColumn,
   page.accessor("title", { header: "Title", size: 280 }),
   page.accessor("meta_description", { header: "Meta description", size: 300 }),
   page.accessor("h1", { header: "H1", size: 240 }),
   page.accessor("canonical", { header: "Canonical", size: 300 }),
   page.accessor("meta_robots", { header: "Meta robots", size: 140 }),
+  page.accessor("x_robots_tag", { header: "X-Robots-Tag", size: 160 }),
   page.accessor("word_count", { header: "Parole", size: 80, cell: (c) => num(c.getValue()) }),
   page.accessor("depth", { header: "Profondità", size: 95, cell: (c) => num(c.getValue()) }),
   page.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
@@ -46,6 +62,16 @@ const codeColumns = page.columns([
   page.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
 ]);
 
+const indexColumns = page.columns([
+  page.accessor("url", { header: "URL", size: 420 }),
+  statusColumn,
+  indexableColumn,
+  reasonColumn,
+  page.accessor("meta_robots", { header: "Meta robots", size: 170 }),
+  page.accessor("x_robots_tag", { header: "X-Robots-Tag", size: 170 }),
+  page.accessor("canonical", { header: "Canonical", size: 380 }),
+]);
+
 const meta = helperFor<MetaRow>();
 const metaTabs = CHECKS.map((check) => ({
   check,
@@ -58,10 +84,11 @@ const metaTabs = CHECKS.map((check) => ({
   ]),
 }));
 
-type Tab = "internal" | "codes" | Check["field"];
+type Tab = "internal" | "codes" | "index" | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
   { id: "internal", label: "Interni" },
   { id: "codes", label: "Codici di risposta" },
+  { id: "index", label: "Indicizzabilità" },
   ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
 ];
 
@@ -153,6 +180,8 @@ export default function App() {
     return c;
   }, [pages]);
 
+  const indexable = useMemo(() => pages.filter((p) => nonIndexableReason(p) === null).length, [pages]);
+  const indexTabFilters = useMemo(() => indexFilters(pages), [pages]);
   const metaTab = metaTabs.find((t) => t.check.field === tab);
   const rows = useMemo(() => (metaTab ? metaRows(pages, metaTab.check.field) : []), [pages, metaTab]);
   const host = pages[0] ? new URL(pages[0].url).hostname : "crawl";
@@ -238,6 +267,7 @@ export default function App() {
         <>
           <div className="stats" role="status">
             <Stat label="URL" value={pages.length} />
+            <Stat label="Indicizzabili" value={indexable} kind="ok" />
             <Stat label="2xx" value={counts.ok} kind="ok" />
             <Stat label="3xx" value={counts.redirect} kind="redirect" />
             <Stat label="4xx" value={counts.client} kind="client" />
@@ -264,6 +294,15 @@ export default function App() {
               columns={codeColumns}
               filters={CODE_FILTERS}
               exportName={`${host}-codici-risposta`}
+            />
+          )}
+          {tab === "index" && (
+            <DataTable
+              key="index"
+              data={pages}
+              columns={indexColumns}
+              filters={indexTabFilters}
+              exportName={`${host}-indicizzabilita`}
             />
           )}
           {metaTab && (

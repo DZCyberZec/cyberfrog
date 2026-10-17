@@ -15,6 +15,7 @@
 
 ## Features
 
+- **Sidebar of reports** grouped by Overview, Pages, Content, Links and Resources, each with a badge showing how many issue types it has.
 - **Issues report**: every problem found, ranked High / Medium / Low, with the number of URLs affected and how to fix it. Click an issue to jump to the matching report, already filtered.
 - **Crawling**: same-host breadth-first crawl, robots.txt (obeyed or ignored), redirects recorded, configurable speed, URL limit, user agent (CyberFrog, Googlebot, Bingbot or custom) and exclude patterns. Live progress, with a Stop button.
 - **On-page**: titles, meta descriptions and H1 (missing, duplicate, too long, too short), word count, canonical, meta robots and X-Robots-Tag.
@@ -34,12 +35,6 @@
 - **Export and reuse**: CSV export of any view (Excel-friendly), crawls saved as single SQLite files you can save, reopen and query.
 - **English and Italian** interface.
 
-<p align="center">
-  <img src="docs/screenshots/internal-links.jpg" alt="Internal report with the inlinks panel for a selected URL" width="860">
-</p>
-<p align="center">
-  <img src="docs/screenshots/structured-data.jpg" alt="Structured data report with one filter per schema.org type" width="860">
-</p>
 
 ## Install
 

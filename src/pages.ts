@@ -21,6 +21,10 @@ export type Page = {
   in_sitemap: boolean;
   response_ms: number | null;
   size_bytes: number | null;
+  /** Equal for pages whose main-content text is identical. */
+  content_hash: string | null;
+  /** 64-bit SimHash as 16 hex digits; few differing bits mean similar text. */
+  simhash: string | null;
 };
 
 /** Mirrors `report::ExternalLink`, `BrokenLink`, `LinkRow` and `PageLinks` in src-tauri/src/report.rs. */
@@ -422,3 +426,65 @@ export function schemaFilters(rows: SchemaPage[]): FilterDef<SchemaPage>[] {
     ...top.map(([t]) => ({ id: `type:${t}`, label: t, test: (r: SchemaPage) => r.types.includes(t) })),
   ];
 }
+
+/** Similarity 1 - differingBits/64 at or above this counts as near-duplicate (at most 6 bits). */
+export const NEAR_DUPLICATE = 0.9;
+export const LOW_CONTENT_WORDS = 200;
+
+export type DupPage = {
+  url: string;
+  word_count: number | null;
+  /** Other pages with identical main-content text. */
+  exact: number;
+  /** Other pages at least 90% similar but not identical. */
+  near: number;
+  /** Highest similarity to another page, 0-1; null when there is nothing to compare with. */
+  similarity: number | null;
+  closest: string | null;
+};
+
+function popcount(n: number): number {
+  n -= (n >>> 1) & 0x55555555;
+  n = (n & 0x33333333) + ((n >>> 2) & 0x33333333);
+  return (((n + (n >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
+}
+
+/** Duplicate analysis over indexable 200 HTML pages, the ones search engines compare. */
+// shortcut: compares all pairs, fine up to ~10k pages; use banded LSH on the SimHash beyond that
+export function dupPages(pages: Page[]): DupPage[] {
+  const cands = pages.filter((p) => isHtmlPage(p) && nonIndexableReason(p) === null && p.content_hash && p.simhash);
+  const hi = cands.map((p) => parseInt(p.simhash!.slice(0, 8), 16));
+  const lo = cands.map((p) => parseInt(p.simhash!.slice(8), 16));
+  const exactCount = new Map<string, number>();
+  for (const p of cands) exactCount.set(p.content_hash!, (exactCount.get(p.content_hash!) ?? 0) + 1);
+  const maxBits = Math.floor(64 * (1 - NEAR_DUPLICATE));
+  const near = cands.map(() => 0);
+  const best = cands.map(() => 65);
+  const bestIdx = cands.map(() => -1);
+  for (let i = 0; i < cands.length; i++) {
+    for (let j = i + 1; j < cands.length; j++) {
+      const d = popcount(hi[i] ^ hi[j]) + popcount(lo[i] ^ lo[j]);
+      if (d < best[i]) [best[i], bestIdx[i]] = [d, j];
+      if (d < best[j]) [best[j], bestIdx[j]] = [d, i];
+      if (d <= maxBits && cands[i].content_hash !== cands[j].content_hash) {
+        near[i]++;
+        near[j]++;
+      }
+    }
+  }
+  return cands.map((p, i) => ({
+    url: p.url,
+    word_count: p.word_count,
+    exact: exactCount.get(p.content_hash!)! - 1,
+    near: near[i],
+    similarity: bestIdx[i] < 0 ? null : 1 - best[i] / 64,
+    closest: bestIdx[i] < 0 ? null : cands[bestIdx[i]].url,
+  }));
+}
+
+export const DUP_FILTERS: FilterDef<DupPage>[] = [
+  { id: "all", label: "Tutte", test: () => true },
+  { id: "exact", label: "Duplicati esatti", test: (d) => d.exact > 0 },
+  { id: "near", label: "Quasi duplicati (≥ 90%)", test: (d) => d.near > 0 },
+  { id: "low", label: `Contenuto scarso (< ${LOW_CONTENT_WORDS} parole)`, test: (d) => (d.word_count ?? 0) < LOW_CONTENT_WORDS },
+];

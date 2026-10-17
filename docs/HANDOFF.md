@@ -52,15 +52,7 @@ docs/clean-room-map.md     funzionalità di riferimento
 7. **Prestazioni:** tempo di risposta e peso pagina, tempo mediano.
 8. **Hreflang:** codice non valido, senza return link, alternative non 200, senza auto-riferimento, senza x-default.
 9. **Dati strutturati:** JSON-LD (anche `@graph`) e microdata; JSON non valido; proprietà richieste da Google mancanti per alcuni tipi.
-
-## In corso al momento del handoff
-
-10. **Contenuti duplicati.**
-    - **Fatto (Rust):** `content_hash` (FNV-1a del testo principale) e `simhash` (SimHash a 64 bit su shingle di 3 parole). Il testo esclude nav e footer, e anche `word_count` ora li esclude. I test passano (13).
-    - **Da fare:**
-      - UI: tab "Duplicati" con filtri esatti, quasi duplicati (similarità ≥ 90%, cioè al massimo 6 bit diversi), contenuto scarso (< 200 parole); solo pagine HTML 200 indicizzabili.
-      - Self-check in `scripts/pages.check.ts`.
-      - Verifica su cyberzec.it e commit.
+10. **Contenuti duplicati:** `content_hash` (FNV-1a) e SimHash a 64 bit del testo principale (senza nav e footer). Tab Duplicati con duplicati esatti, quasi duplicati (≥ 90%, al massimo 6 bit diversi) e contenuto scarso (< 200 parole), solo su pagine indicizzabili. Confronto di tutte le coppie in TS: va bene fino a ~10k pagine.
 
 ## Roadmap
 

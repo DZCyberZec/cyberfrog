@@ -20,6 +20,8 @@ import {
   hreflangPages,
   schemaFilters,
   schemaPages,
+  DUP_FILTERS,
+  dupPages,
   buildSitemapXml,
   medianMs,
   codeLabel,
@@ -38,6 +40,7 @@ import {
   type HreflangPage,
   type HreflangRow,
   type SchemaPage,
+  type DupPage,
   type StructuredRow,
   type ImageRow,
   type MetaRow,
@@ -203,6 +206,24 @@ const schemaColumns = sd.columns([
   }),
 ]);
 
+const pct = new Intl.NumberFormat("it-IT", { style: "percent", maximumFractionDigits: 0 });
+const dup = helperFor<DupPage>();
+const dupColumns = dup.columns([
+  dup.accessor("url", { header: "URL", size: 420 }),
+  dup.accessor("word_count", { header: "Parole", size: 80, cell: (c) => num(c.getValue()) }),
+  dup.accessor("exact", { header: "Duplicati esatti", size: 130, cell: (c) => num(c.getValue()) }),
+  dup.accessor("near", { header: "Quasi duplicati", size: 130, cell: (c) => num(c.getValue()) }),
+  dup.accessor("similarity", {
+    header: "Similarità max",
+    size: 125,
+    cell: (c) => {
+      const v = c.getValue();
+      return <span className={`num${v !== null && v >= 0.9 ? " heavy" : ""}`}>{v === null ? "" : pct.format(v)}</span>;
+    },
+  }),
+  dup.accessor("closest", { header: "Pagina più simile", size: 380 }),
+]);
+
 const meta = helperFor<MetaRow>();
 const metaTabs = CHECKS.map((check) => ({
   check,
@@ -226,6 +247,7 @@ type Tab =
   | "perf"
   | "hreflang"
   | "schema"
+  | "duplicates"
   | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
   { id: "internal", label: "Interni" },
@@ -238,6 +260,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "perf", label: "Prestazioni" },
   { id: "hreflang", label: "Hreflang" },
   { id: "schema", label: "Dati strutturati" },
+  { id: "duplicates", label: "Duplicati" },
   ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
 ];
 
@@ -372,6 +395,8 @@ export default function App() {
   }, [pages]);
 
   const hreflangRows = useMemo(() => hreflangPages(pages, hreflang), [pages, hreflang]);
+  // only computed while the tab is open: it compares every pair of pages
+  const dupRows = useMemo(() => (tab === "duplicates" ? dupPages(pages) : []), [pages, tab]);
   const schemaRows = useMemo(() => schemaPages(pages, structured), [pages, structured]);
   const schemaTabFilters = useMemo(() => schemaFilters(schemaRows), [schemaRows]);
   const median = useMemo(() => medianMs(pages), [pages]);
@@ -576,6 +601,16 @@ export default function App() {
                     Genera sitemap XML
                   </button>
                 }
+                {...selectByUrl}
+              />
+            )}
+            {tab === "duplicates" && (
+              <DataTable
+                key="duplicates"
+                data={dupRows}
+                columns={dupColumns}
+                filters={DUP_FILTERS}
+                exportName={`${host}-duplicati`}
                 {...selectByUrl}
               />
             )}

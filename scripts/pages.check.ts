@@ -1,13 +1,13 @@
 // Self-check for filters and CSV export. Run: node scripts/pages.check.ts
 import assert from "node:assert/strict";
 import {
-  BROKEN_FILTERS, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
+  BROKEN_FILTERS, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
 } from "../src/pages.ts";
 
 const base: Page = {
   url: "", depth: 0, status: 200, content_type: "text/html", redirect_to: null, blocked_by_robots: false,
   error: null, title: null, meta_description: null, h1: null, canonical: null, meta_robots: null,
-  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0, in_sitemap: false, response_ms: null, size_bytes: null,
+  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0, in_sitemap: false, response_ms: null, size_bytes: null, content_hash: null, simhash: null,
 };
 const pages: Page[] = [
   { ...base, url: "/a", title: "Same title for both pages here!" },
@@ -167,4 +167,21 @@ assert.deepEqual(sf.map((f) => f.id).slice(5), ["type:Article", "type:Organizati
 assert.deepEqual(pick(sps, sf, "errors"), ["/b"]);
 assert.deepEqual(pick(sps, sf, "warnings"), ["/a"]);
 assert.deepEqual(pick(sps, sf, "without"), ["/c"]);
+const dp: Page[] = [
+  { ...base, url: "/a", content_hash: "h1", simhash: "ffffffff00000000", word_count: 500 },
+  { ...base, url: "/a-copy", content_hash: "h1", simhash: "ffffffff00000000", word_count: 500 },
+  { ...base, url: "/close", content_hash: "h2", simhash: "ffffffff0000003f", word_count: 480 }, // 6 bits from /a
+  { ...base, url: "/far", content_hash: "h3", simhash: "ffffffff000000ff", word_count: 90 }, // 8 bits from /a
+  { ...base, url: "/noidx", content_hash: "h1", simhash: "ffffffff00000000", meta_robots: "noindex" },
+  { ...base, url: "/empty", content_hash: null, simhash: null },
+];
+const dups = dupPages(dp);
+assert.deepEqual(dups.map((d) => d.url), ["/a", "/a-copy", "/close", "/far"], "indexable pages with text only");
+const da = dups[0];
+assert.deepEqual([da.exact, da.near, da.similarity, da.closest], [1, 1, 1, "/a-copy"]);
+assert.equal(dups[2].near, 3, "/close is within 6 bits of /a, /a-copy and /far");
+assert.equal(dups[3].similarity, 1 - 2 / 64);
+assert.deepEqual(pick(dups, DUP_FILTERS, "exact"), ["/a", "/a-copy"]);
+assert.deepEqual(pick(dups, DUP_FILTERS, "low"), ["/far"]);
+assert.deepEqual(dupPages([dp[0]]).map((d) => d.similarity), [null], "a lone page has nothing to compare with");
 console.log("pages.check: ok");

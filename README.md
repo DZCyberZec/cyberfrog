@@ -26,6 +26,9 @@
 - **Hreflang**: invalid codes, missing return links, non-200 alternates, missing self-reference and x-default.
 - **Structured data**: JSON-LD (including `@graph`) and microdata types, invalid JSON, missing properties Google requires for common rich results.
 - **Duplicate content**: exact duplicates and near duplicates (SimHash, ≥ 90% similar) on the main content, plus low-content pages.
+- **Crawl comparison**: compares each crawl with the previous one of the same site — new and removed pages, status and indexability changes, changed titles, meta descriptions, H1 and canonicals, and how each issue moved.
+- **Uncrawlable links**: links search engines may not follow (JavaScript navigation, `href` outside `<a>`) and invalid URLs.
+- **AI assistants**: a built-in MCP server lets Claude and other assistants run crawls and query the data.
 - **Export and reuse**: CSV export of any view (Excel-friendly), crawls saved as single SQLite files you can save, reopen and query.
 - **English and Italian** interface.
 
@@ -55,6 +58,39 @@ Prefer the Terminal? This removes the download quarantine flag:
 ```bash
 xattr -dr com.apple.quarantine /Applications/CyberFrog.app
 ```
+
+## Use with AI assistants (MCP)
+
+CyberFrog includes a [Model Context Protocol](https://modelcontextprotocol.io) server, so assistants like Claude can crawl sites and analyse the results for you. Ask things like *"Crawl example.com and tell me what to fix first"* or *"Which pages have duplicate titles?"*.
+
+**Claude Code:**
+
+```bash
+claude mcp add cyberfrog -- /Applications/CyberFrog.app/Contents/MacOS/cyberfrog --mcp
+```
+
+**Claude Desktop:** add this to `claude_desktop_config.json` (Settings → Developer → Edit Config):
+
+```json
+{
+  "mcpServers": {
+    "cyberfrog": {
+      "command": "/Applications/CyberFrog.app/Contents/MacOS/cyberfrog",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+| Tool | What it does |
+|---|---|
+| `crawl_site` | Crawls a site (default limit 500 URLs) and returns an SEO summary |
+| `list_crawls` | Lists saved crawls, newest first |
+| `crawl_summary` | Status codes, indexability, title/meta/H1 problems, broken links, slow pages, images |
+| `query_crawl` | Runs a read-only SQL `SELECT` on a crawl (up to 200 rows) |
+| `page_details` | Metadata, inlinks and outlinks of one URL |
+
+Crawls made through MCP are saved alongside the app's crawls, so you can open them in CyberFrog too.
 
 ## Build from source
 

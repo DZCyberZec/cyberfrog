@@ -1,4 +1,5 @@
 pub mod crawler;
+pub mod mcp;
 pub mod report;
 
 use std::path::{Path, PathBuf};

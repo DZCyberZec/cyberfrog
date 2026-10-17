@@ -360,6 +360,16 @@ const EN: Record<string, string> = {
   Catena: "Chain",
   "Destinazione finale": "Final URL",
   "Stato finale": "Final status",
+  // site structure and link score
+  Struttura: "Structure",
+  "Link Score": "Link Score",
+  "Link Score max": "Max Link Score",
+  "URL per profondità": "URLs by depth",
+  "Solo sitemap": "Sitemap only",
+  "Livello {n}": "Level {n}",
+  Cartella: "Folder",
+  Chiudi: "Collapse",
+  Apri: "Expand",
   // settings
   "Impostazioni crawl": "Crawl settings",
   Limiti: "Limits",

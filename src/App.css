@@ -299,3 +299,20 @@ dialog.settings button.add-rule { align-self: flex-start; text-align: left; }
 .nav-badge.redirect { color: var(--redirect); background: var(--redirect-bg); }
 .nav-badge.blocked { color: var(--blocked); background: var(--blocked-bg); }
 @media (max-width: 900px) { .sidebar { width: 176px; } }
+
+/* Site structure */
+.structure { flex: 1; min-height: 0; overflow: auto; background: var(--surface); }
+.depths { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.depths h2, .structure h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.depth-row { display: grid; grid-template-columns: 110px 1fr 60px; align-items: center; gap: 10px; margin: 3px 0; }
+.depth-label { color: var(--muted); }
+.depth-bar { height: 10px; min-width: 2px; border-radius: 3px; background: var(--accent); justify-self: start; }
+.tree { width: 100%; border-collapse: collapse; }
+.tree th { position: sticky; top: 0; padding: 7px 10px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: left; background: var(--sunken); border-bottom: 1px solid var(--border-strong); }
+.tree th.num { text-align: right; }
+.tree td { padding: 4px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.tree tr.selected td { background: var(--accent-soft); }
+.tree .twisty { display: inline-block; width: 18px; padding: 0; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.tree .node-link { padding: 0; font: inherit; color: var(--text); background: none; border: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.tree .node-link:hover { color: var(--accent); }
+.tree .node-name { color: var(--muted); }

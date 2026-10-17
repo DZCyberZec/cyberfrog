@@ -6,14 +6,14 @@ import type { Page } from "../src/pages.ts";
 Object.defineProperty(globalThis, "navigator", { value: { language: "it-IT" }, configurable: true });
 const {
   BROKEN_FILTERS, customRows, customFilters, CHANGE_FILTERS, compareCrawls, allIssues, BAD_LINK_FILTERS, badLinkReason, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
-  REDIRECT_FILTERS, redirectChains,
+  REDIRECT_FILTERS, redirectChains, siteTree, depthCounts,
 } = await import("../src/pages.ts");
 const { hasTranslation } = await import("../src/i18n.ts");
 
 const base: Page = {
   url: "", depth: 0, status: 200, content_type: "text/html", redirect_to: null, blocked_by_robots: false,
   error: null, title: null, meta_description: null, h1: null, canonical: null, meta_robots: null,
-  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0, in_sitemap: false, response_ms: null, size_bytes: null, content_hash: null, simhash: null,
+  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0, in_sitemap: false, response_ms: null, size_bytes: null, content_hash: null, simhash: null, link_score: 0,
 };
 const pages: Page[] = [
   { ...base, url: "/a", title: "Same title for both pages here!" },
@@ -297,4 +297,18 @@ assert.deepEqual(pick(chains, REDIRECT_FILTERS, "chains"), ["/a"], "/b alone is 
 assert.deepEqual(pick(chains, REDIRECT_FILTERS, "loops"), ["/x", "/y"]);
 assert.deepEqual(pick(chains, REDIRECT_FILTERS, "bad-final"), ["/gone"]);
 assert.deepEqual(pick(chains, REDIRECT_FILTERS, "leaves"), ["/out"]);
+const tp: Page[] = [
+  { ...base, url: "https://s.it/", link_score: 100 },
+  { ...base, url: "https://s.it/blog/", depth: 1, link_score: 60 },
+  { ...base, url: "https://s.it/blog/a/", depth: 2, link_score: 20 },
+  { ...base, url: "https://s.it/blog/b/", depth: 2, link_score: 10, meta_robots: "noindex" },
+  { ...base, url: "https://s.it/blog/?page=2", depth: 2, link_score: 5 },
+  { ...base, url: "https://s.it/chi-sono/", depth: 1, link_score: 40 },
+  { ...base, url: "https://s.it/solo-sitemap/", depth: null, link_score: 0 },
+];
+const tree = siteTree(tp);
+assert.equal(tree.urls, 7);
+assert.deepEqual(tree.children.map((c) => [c.name, c.urls, c.indexable, c.maxScore]), [["blog", 4, 3, 60], ["chi-sono", 1, 1, 40], ["solo-sitemap", 1, 1, 0]]);
+assert.equal(tree.children[0].page?.url, "https://s.it/blog/", "the ?page=2 variant doesn't replace the folder's own page");
+assert.deepEqual(depthCounts(tp), [{ depth: 0, count: 1 }, { depth: 1, count: 2 }, { depth: 2, count: 3 }, { depth: null, count: 1 }]);
 console.log("pages.check: ok");

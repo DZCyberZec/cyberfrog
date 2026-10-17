@@ -20,11 +20,11 @@ async fn main() -> cyberfrog_lib::crawler::CrawlResult<()> {
         t0.elapsed().as_secs_f32(),
         out.display()
     );
-    for p in read_pages(&out)?.iter().take(5) {
-        println!(
-            "{:?} {} | {:?} | {:?} words, {} inlinks",
-            p.status, p.url, p.title, p.word_count, p.inlinks
-        );
+    let mut pages = read_pages(&out)?;
+    pages.sort_by(|a, b| b.link_score.cmp(&a.link_score));
+    println!("Top pages by Link Score:");
+    for p in pages.iter().take(5) {
+        println!("{:>3}  {}  ({} inlinks)", p.link_score, p.url, p.inlinks);
     }
     Ok(())
 }

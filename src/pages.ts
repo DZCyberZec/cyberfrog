@@ -27,6 +27,8 @@ export type Page = {
   content_hash: string | null;
   /** 64-bit SimHash as 16 hex digits; few differing bits mean similar text. */
   simhash: string | null;
+  /** Internal PageRank scaled to 0–100. */
+  link_score: number;
 };
 
 /** Mirrors `report::ExternalLink`, `BrokenLink`, `LinkRow` and `PageLinks` in src-tauri/src/report.rs. */
@@ -757,3 +759,65 @@ export const REDIRECT_FILTERS: FilterDef<RedirectChain>[] = [
   { id: "bad-final", label: tr("Destinazione non 200"), test: (r) => !r.loop && !r.leaves && r.finalStatus !== "200" },
   { id: "leaves", label: tr("Verso URL non scansionati"), test: (r) => r.leaves },
 ];
+
+/** A folder of the site (a URL path prefix) with totals for every crawled URL under it. */
+export type DirNode = {
+  name: string;
+  path: string;
+  /** Crawled URLs at or under this path. */
+  urls: number;
+  indexable: number;
+  /** Highest Link Score under this path. */
+  maxScore: number;
+  /** The URL that is exactly this path, if crawled. */
+  page: Page | null;
+  children: DirNode[];
+};
+
+/** Folder tree of the crawled URLs of one host, children sorted by size. */
+export function siteTree(pages: Page[]): DirNode {
+  const root: DirNode = { name: "/", path: "/", urls: 0, indexable: 0, maxScore: 0, page: null, children: [] };
+  for (const p of pages) {
+    let url: URL;
+    try {
+      url = new URL(p.url);
+    } catch {
+      continue;
+    }
+    const segments = url.pathname.split("/").filter(Boolean);
+    const indexable = nonIndexableReason(p) === null && isHtmlPage(p);
+    let node = root;
+    const visit = (n: DirNode) => {
+      n.urls++;
+      if (indexable) n.indexable++;
+      n.maxScore = Math.max(n.maxScore, p.link_score);
+    };
+    visit(node);
+    segments.forEach((seg, i) => {
+      const path = "/" + segments.slice(0, i + 1).join("/") + "/";
+      let child = node.children.find((c) => c.name === seg);
+      if (!child) {
+        child = { name: seg, path, urls: 0, indexable: 0, maxScore: 0, page: null, children: [] };
+        node.children.push(child);
+      }
+      node = child;
+      visit(node);
+    });
+    if (!url.search) node.page ??= p; // query-string variants share the node but not its page
+  }
+  const sort = (n: DirNode) => {
+    n.children.sort((a, b) => b.urls - a.urls || a.name.localeCompare(b.name));
+    n.children.forEach(sort);
+  };
+  sort(root);
+  return root;
+}
+
+/** How many URLs sit at each link depth; `null` depth (sitemap-only) is counted apart. */
+export function depthCounts(pages: Page[]): { depth: number | null; count: number }[] {
+  const counts = new Map<number | null, number>();
+  for (const p of pages) counts.set(p.depth, (counts.get(p.depth) ?? 0) + 1);
+  return [...counts]
+    .map(([depth, count]) => ({ depth, count }))
+    .sort((a, b) => (a.depth ?? Infinity) - (b.depth ?? Infinity));
+}

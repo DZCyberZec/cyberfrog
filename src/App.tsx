@@ -8,6 +8,7 @@ import { DataTable, helperFor } from "./DataTable";
 import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
 import { SettingsDialog } from "./SettingsDialog";
+import { SiteStructure } from "./SiteStructure";
 import { loadSettings, saveSettings, type Settings } from "./settings";
 import {
   BROKEN_FILTERS,
@@ -104,6 +105,7 @@ const internalColumns = page.columns([
   page.accessor("word_count", { header: tr("Parole"), size: 80, cell: (c) => num(c.getValue()) }),
   page.accessor("depth", { header: tr("Profondità"), size: 95, cell: (c) => num(c.getValue()) }),
   page.accessor("inlinks", { header: tr("Inlink"), size: 75, cell: (c) => num(c.getValue()) }),
+  page.accessor("link_score", { header: tr("Link Score"), size: 95, cell: (c) => num(c.getValue()) }),
   page.accessor("outlinks", { header: tr("Outlink"), size: 85, cell: (c) => num(c.getValue()) }),
   page.accessor("external_outlinks", { header: tr("Outlink esterni"), size: 125, cell: (c) => num(c.getValue()) }),
   page.accessor("response_ms", { header: tr("Tempo (ms)"), size: 100, cell: (c) => ms(c.getValue()) }),
@@ -335,6 +337,7 @@ type Tab =
   | "broken"
   | "badlinks"
   | "redirects"
+  | "structure"
   | "custom"
   | "images"
   | "sitemap"
@@ -356,6 +359,7 @@ const GROUPS: { label: string; items: { id: Tab; label: string }[] }[] = [
     label: tr("Pagine"),
     items: [
       { id: "internal", label: tr("Interni") },
+      { id: "structure", label: tr("Struttura") },
       { id: "codes", label: tr("Codici di risposta") },
       { id: "redirects", label: tr("Redirect") },
       { id: "index", label: tr("Indicizzabilità") },
@@ -911,7 +915,12 @@ export default function App() {
                     }
                   />
                 ))}
-              {tab === "redirects" && (
+              {tab === "structure" && (
+              <div className="table-pane">
+                <SiteStructure pages={pages} selected={selected} onSelect={setSelected} />
+              </div>
+            )}
+            {tab === "redirects" && (
                 <DataTable
                   key={`redirects-${jump.seq}`}
                   initialFilter={jump.tab === "redirects" ? (jump.filter ?? undefined) : undefined}

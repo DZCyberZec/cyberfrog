@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="70%">
+      <stop offset="0" stop-color="#0d2a17"/>
+      <stop offset="1" stop-color="#030a06"/>
+    </radialGradient>
+    <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7dff3c"/>
+      <stop offset="0.55" stop-color="#3fd22c"/>
+      <stop offset="1" stop-color="#14751f"/>
+    </linearGradient>
+    <linearGradient id="bulge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9dff4f"/>
+      <stop offset="1" stop-color="#2fb52a"/>
+    </linearGradient>
+    <linearGradient id="jaw" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b9f08f"/>
+      <stop offset="1" stop-color="#4f9a3c"/>
+    </linearGradient>
+    <radialGradient id="pupil" cx="40%" cy="38%" r="65%">
+      <stop offset="0" stop-color="#1f2a20"/>
+      <stop offset="1" stop-color="#020503"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- app tile -->
+  <rect x="64" y="64" width="896" height="896" rx="210" fill="url(#bg)"/>
+  <rect x="64" y="64" width="896" height="896" rx="210" fill="none" stroke="#2dff6e" stroke-width="7" filter="url(#glow)" opacity="0.9"/>
+
+  <!-- pixel bits -->
+  <g fill="#3dff5c" filter="url(#soft)">
+    <rect x="150" y="455" width="30" height="30"/><rect x="190" y="500" width="36" height="36"/>
+    <rect x="140" y="545" width="28" height="28"/><rect x="200" y="410" width="22" height="22" opacity="0.7"/>
+    <rect x="846" y="440" width="30" height="30"/><rect x="800" y="490" width="36" height="36"/>
+    <rect x="858" y="535" width="28" height="28"/><rect x="806" y="400" width="22" height="22" opacity="0.7"/>
+  </g>
+
+  <!-- head -->
+  <g filter="url(#soft)">
+    <path d="M512 330
+             C 660 330 760 360 812 440
+             C 870 530 880 620 840 690
+             C 790 780 650 840 512 880
+             C 374 840 234 780 184 690
+             C 144 620 154 530 212 440
+             C 264 360 364 330 512 330 Z" fill="url(#skin)"/>
+    <!-- eye bulges -->
+    <circle cx="335" cy="420" r="150" fill="url(#bulge)"/>
+    <circle cx="689" cy="420" r="150" fill="url(#bulge)"/>
+  </g>
+
+  <!-- lower jaw -->
+  <path d="M232 700 C 330 760 694 760 792 700 C 760 790 640 850 512 880 C 384 850 264 790 232 700 Z" fill="url(#jaw)" opacity="0.85"/>
+  <!-- mouth -->
+  <path d="M220 682 C 360 760 664 760 804 682" fill="none" stroke="#062b10" stroke-width="18" stroke-linecap="round"/>
+
+  <!-- nostrils -->
+  <ellipse cx="468" cy="600" rx="18" ry="12" fill="#062b10" transform="rotate(20 468 600)"/>
+  <ellipse cx="556" cy="600" rx="18" ry="12" fill="#062b10" transform="rotate(-20 556 600)"/>
+
+  <!-- circuits -->
+  <g fill="none" stroke="#c4ff8f" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" filter="url(#soft)">
+    <path d="M512 340 V 560"/>
+    <path d="M470 360 V 440"/><circle cx="470" cy="458" r="17"/>
+    <path d="M560 470 V 410 L 588 382"/><circle cx="560" cy="488" r="17"/>
+    <path d="M600 560 V 500 L 640 460"/>
+    <path d="M200 650 L 268 618"/><circle cx="286" cy="610" r="17"/>
+    <path d="M824 650 L 756 618"/><circle cx="738" cy="610" r="17"/>
+    <path d="M660 640 V 600"/><circle cx="660" cy="582" r="15"/>
+  </g>
+
+  <!-- eyes -->
+  <circle cx="335" cy="420" r="112" fill="url(#pupil)" stroke="#8dff4a" stroke-width="14"/>
+  <circle cx="689" cy="420" r="112" fill="url(#pupil)" stroke="#8dff4a" stroke-width="14"/>
+  <!-- cyber ring on the right eye -->
+  <circle cx="689" cy="420" r="84" fill="none" stroke="#5dff52" stroke-width="10" stroke-dasharray="60 22 18 22" filter="url(#soft)"/>
+  <circle cx="689" cy="420" r="62" fill="none" stroke="#2bd94a" stroke-width="5" stroke-dasharray="14 12"/>
+  <!-- highlights -->
+  <circle cx="300" cy="385" r="26" fill="#ffffff"/>
+  <circle cx="335" cy="452" r="9" fill="#ffffff" opacity="0.5"/>
+  <circle cx="712" cy="385" r="24" fill="#ffffff"/>
+</svg>

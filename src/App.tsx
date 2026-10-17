@@ -3,6 +3,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import cyberzecShield from "./assets/cyberzec-shield.png";
+import cyberfrogLogo from "./assets/cyberfrog-logo.png";
 import { DataTable, helperFor } from "./DataTable";
 import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
@@ -476,7 +477,7 @@ export default function App() {
     <main className="app">
       <header className="toolbar">
         <div className="brand">
-          <span className="logo" aria-hidden />
+          <img className="logo" src={cyberfrogLogo} alt="" width={32} height={32} />
           <span className="brand-text">
             CyberFrog
             <small>Another SEO Tool</small>

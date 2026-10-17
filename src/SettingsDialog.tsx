@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { DEFAULT_SETTINGS, USER_AGENTS, type Settings } from "./settings";
+import { DEFAULT_SETTINGS, USER_AGENTS, type RuleSpec, type Settings } from "./settings";
 import { tr } from "./i18n";
 
 type Props = {
@@ -121,6 +121,27 @@ export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
           </label>
         </fieldset>
 
+        <fieldset>
+          <legend>{tr("Estrazione e ricerca")}</legend>
+          <small>{tr("Estrai dati o cerca testo nel sorgente di ogni pagina.")}</small>
+          {draft.rules.map((rule, i) => (
+            <RuleEditor
+              key={i}
+              index={i}
+              rule={rule}
+              onChange={(r) => set("rules", draft.rules.map((old, j) => (j === i ? r : old)))}
+              onRemove={() => set("rules", draft.rules.filter((_, j) => j !== i))}
+            />
+          ))}
+          <button
+            type="button"
+            className="link add-rule"
+            onClick={() => set("rules", [...draft.rules, { name: "", kind: "css", expr: "", attr: null }])}
+          >
+            {tr("+ Aggiungi regola")}
+          </button>
+        </fieldset>
+
         <footer>
           <button type="button" className="link" onClick={() => setDraft(DEFAULT_SETTINGS)}>
             {tr("Ripristina predefinite")}
@@ -144,5 +165,68 @@ function Check({ label, checked, onChange }: { label: string; checked: boolean; 
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.currentTarget.checked)} />
       {label}
     </label>
+  );
+}
+
+const EXAMPLES: Record<RuleSpec["kind"], { expr: string; attr?: string }> = {
+  css: { expr: 'meta[property="article:author"]', attr: "content" },
+  regex: { expr: "id=(G-[A-Z0-9]+)" },
+  search: { expr: "googletagmanager.com" },
+};
+
+function RuleEditor({
+  index,
+  rule,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  rule: RuleSpec;
+  onChange: (r: RuleSpec) => void;
+  onRemove: () => void;
+}) {
+  const label = tr("Regola {n}", { n: index + 1 });
+  return (
+    <div className="rule" role="group" aria-label={label}>
+      <input
+        type="text"
+        aria-label={`${label}: ${tr("Nome")}`}
+        placeholder={tr("Nome")}
+        value={rule.name}
+        onChange={(e) => onChange({ ...rule, name: e.currentTarget.value })}
+      />
+      <select
+        aria-label={`${label}: ${tr("Tipo di regola")}`}
+        value={rule.kind}
+        onChange={(e) => onChange({ ...rule, kind: e.currentTarget.value as RuleSpec["kind"], attr: null })}
+      >
+        <option value="css">{tr("Selettore CSS")}</option>
+        <option value="regex">{tr("Espressione regolare")}</option>
+        <option value="search">{tr("Cerca testo")}</option>
+      </select>
+      <input
+        type="text"
+        className="expr"
+        aria-label={`${label}: ${tr("Espressione")}`}
+        placeholder={EXAMPLES[rule.kind].expr}
+        value={rule.expr}
+        spellCheck={false}
+        onChange={(e) => onChange({ ...rule, expr: e.currentTarget.value })}
+      />
+      {rule.kind !== "css" && <span aria-hidden />}
+      {rule.kind === "css" && (
+        <input
+          type="text"
+          aria-label={`${label}: ${tr("Attributo (facoltativo)")}`}
+          placeholder={tr("Attributo (facoltativo)")}
+          value={rule.attr ?? ""}
+          spellCheck={false}
+          onChange={(e) => onChange({ ...rule, attr: e.currentTarget.value || null })}
+        />
+      )}
+      <button type="button" className="remove" onClick={onRemove} aria-label={`${tr("Rimuovi regola")} ${index + 1}`}>
+        ✕
+      </button>
+    </div>
   );
 }

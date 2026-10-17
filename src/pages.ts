@@ -663,3 +663,37 @@ export const CHANGE_FILTERS: FilterDef<Change>[] = [
   { id: "indexability", label: tr("Indicizzabilità"), test: (c) => c.kind === "indexability" },
   { id: "content", label: tr("Title, meta, H1, canonical"), test: (c) => contentKinds.includes(c.kind) },
 ];
+
+/** Mirrors `report::CustomData`. */
+export type CustomRuleRow = { name: string; kind: "css" | "regex" | "search"; expr: string; attr: string | null };
+export type CustomData = { rules: CustomRuleRow[]; values: { page: string; rule: string; value: string }[] };
+
+/** One parsed HTML page with every rule's values (a search rule's single value is its match count). */
+export type CustomRow = { url: string; values: Record<string, string[]> };
+
+export function customRows(pages: Page[], data: CustomData): CustomRow[] {
+  const byPage = new Map<string, Record<string, string[]>>();
+  for (const v of data.values) {
+    const row = byPage.get(v.page) ?? {};
+    (row[v.rule] ??= []).push(v.value);
+    byPage.set(v.page, row);
+  }
+  // pages whose HTML was read; word_count is null for everything else
+  return pages.filter((p) => p.word_count !== null).map((p) => ({ url: p.url, values: byPage.get(p.url) ?? {} }));
+}
+
+/** Found / not found per rule: "contains" for searches, "has a value" for extractions. */
+export function customFilters(rules: CustomRuleRow[]): FilterDef<CustomRow>[] {
+  return [
+    { id: "all", label: tr("Tutte"), test: () => true },
+    ...rules.flatMap((r): FilterDef<CustomRow>[] => {
+      const found = (row: CustomRow) =>
+        r.kind === "search" ? Number(row.values[r.name]?.[0] ?? 0) > 0 : (row.values[r.name]?.length ?? 0) > 0;
+      const [yes, no] = r.kind === "search" ? ["Contiene: {name}", "Non contiene: {name}"] : ["Con {name}", "Senza {name}"];
+      return [
+        { id: `yes:${r.name}`, label: tr(yes, { name: r.name }), test: found },
+        { id: `no:${r.name}`, label: tr(no, { name: r.name }), test: (row) => !found(row) },
+      ];
+    }),
+  ];
+}

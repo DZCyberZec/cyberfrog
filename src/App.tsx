@@ -33,6 +33,10 @@ import {
   type CrawlSnapshot,
   BAD_LINK_FILTERS,
   badLinkReason,
+  customFilters,
+  customRows,
+  type CustomData,
+  type CustomRow,
   type BadLinkRow,
   type Issue,
   buildSitemapXml,
@@ -309,6 +313,7 @@ type Tab =
   | "external"
   | "broken"
   | "badlinks"
+  | "custom"
   | "images"
   | "sitemap"
   | "perf"
@@ -325,6 +330,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "external", label: tr("Link esterni") },
   { id: "broken", label: tr("Link rotti") },
   { id: "badlinks", label: tr("Link non scansionabili") },
+  { id: "custom", label: tr("Personalizzati") },
   { id: "images", label: tr("Immagini") },
   { id: "sitemap", label: tr("Sitemap") },
   { id: "perf", label: tr("Prestazioni") },
@@ -347,6 +353,7 @@ type CrawlData = {
   hreflang: HreflangRow[];
   structured: StructuredRow[];
   bad_links: BadLinkRow[];
+  custom: CustomData;
 };
 type CrawlSummary = { path: string; start_url: string | null; pages: number; modified_ms: number };
 type Progress = { stage: "pages" | "external" | "images"; done: number; pending: number };
@@ -368,6 +375,7 @@ export default function App() {
   const [hreflang, setHreflang] = useState<HreflangRow[]>([]);
   const [structured, setStructured] = useState<StructuredRow[]>([]);
   const [badLinks, setBadLinks] = useState<BadLinkRow[]>([]);
+  const [custom, setCustom] = useState<CustomData>({ rules: [], values: [] });
   /** Crawl file the current crawl is compared with, and its loaded data. */
   const [baseline, setBaseline] = useState<string | null>(null);
   const [baselineData, setBaselineData] = useState<CrawlSnapshot | null>(null);
@@ -404,6 +412,7 @@ export default function App() {
     setHreflang(data.hreflang);
     setStructured(data.structured);
     setBadLinks(data.bad_links);
+    setCustom(data.custom);
     setSelected(null);
     setSelectedImage(null);
     setCrawlPath(data.path);
@@ -533,6 +542,30 @@ export default function App() {
     [pages, broken, images, hreflang, structured, badLinks],
   );
   const issues = useMemo(() => allIssues(snapshot, dupRows), [snapshot, dupRows]);
+  const customTable = useMemo(() => {
+    const cust = helperFor<CustomRow>();
+    return {
+      rows: custom.rules.length ? customRows(pages, custom) : [],
+      filters: customFilters(custom.rules),
+      columns: cust.columns([
+        cust.accessor("url", { header: "URL", size: 420 }),
+        ...custom.rules.map((r) =>
+          r.kind === "search"
+            ? cust.accessor((row) => Number(row.values[r.name]?.[0] ?? 0), {
+                id: `rule:${r.name}`,
+                header: r.name,
+                size: 140,
+                cell: (c) => num(c.getValue()),
+              })
+            : cust.accessor((row) => (row.values[r.name] ?? []).join(" | "), {
+                id: `rule:${r.name}`,
+                header: r.name,
+                size: 280,
+              }),
+        ),
+      ]),
+    };
+  }, [pages, custom]);
   const changes = useMemo(
     (): Change[] => (tab === "compare" && baselineData ? compareCrawls(baselineData, snapshot) : []),
     [tab, baselineData, snapshot],
@@ -805,6 +838,21 @@ export default function App() {
                   }
                 />
               ))}
+            {tab === "custom" && (
+              <DataTable
+                key={`custom-${crawlPath}-${jump.seq}`}
+                data={customTable.rows}
+                columns={customTable.columns}
+                filters={customTable.filters}
+                exportName={`${host}-personalizzati`}
+                emptyText={
+                  custom.rules.length
+                    ? undefined
+                    : tr("Nessuna regola personalizzata. Aggiungine una in Impostazioni → Estrazione e ricerca.")
+                }
+                {...selectByUrl}
+              />
+            )}
             {tab === "badlinks" && (
               <DataTable
                 key={`badlinks-${jump.seq}`}

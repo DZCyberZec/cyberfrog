@@ -5,7 +5,7 @@ import type { Page } from "../src/pages.ts";
 // expected labels below are Italian, the source language; pin it before the modules load
 Object.defineProperty(globalThis, "navigator", { value: { language: "it-IT" }, configurable: true });
 const {
-  BROKEN_FILTERS, CHANGE_FILTERS, compareCrawls, allIssues, BAD_LINK_FILTERS, badLinkReason, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
+  BROKEN_FILTERS, customRows, customFilters, CHANGE_FILTERS, compareCrawls, allIssues, BAD_LINK_FILTERS, badLinkReason, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
 } = await import("../src/pages.ts");
 const { hasTranslation } = await import("../src/i18n.ts");
 
@@ -261,4 +261,21 @@ assert.deepEqual(
 );
 assert.equal(pick(changes.map((c) => ({ ...c, url: c.key })), CHANGE_FILTERS, "content").length, 2);
 assert.equal(allIssues(v2).find((i) => i.label === "Title mancante")?.count, 1);
+const cdata = {
+  rules: [
+    { name: "GTM", kind: "search" as const, expr: "googletagmanager", attr: null },
+    { name: "Autore", kind: "css" as const, expr: ".author", attr: null },
+  ],
+  values: [
+    { page: "/a", rule: "GTM", value: "2" }, { page: "/a", rule: "Autore", value: "Ada" }, { page: "/a", rule: "Autore", value: "Bob" },
+    { page: "/b", rule: "GTM", value: "0" },
+  ],
+};
+const crows = customRows([{ ...base, url: "/a" }, { ...base, url: "/b" }, { ...base, url: "/pdf", word_count: null }], cdata);
+assert.deepEqual(crows.map((r) => r.url), ["/a", "/b"], "only pages whose HTML was read");
+assert.deepEqual(crows[0].values.Autore, ["Ada", "Bob"]);
+const cf = customFilters(cdata.rules);
+assert.deepEqual(cf.map((f) => f.label), ["Tutte", "Contiene: GTM", "Non contiene: GTM", "Con Autore", "Senza Autore"]);
+assert.deepEqual(pick(crows, cf, "no:GTM"), ["/b"]);
+assert.deepEqual(pick(crows, cf, "no:Autore"), ["/b"]);
 console.log("pages.check: ok");

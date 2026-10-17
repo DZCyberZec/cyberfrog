@@ -223,7 +223,7 @@ button { font: inherit; }
 
 /* Settings dialog */
 dialog.settings {
-  width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0;
+  width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0;
   color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: 0 20px 60px rgb(0 0 0 / 0.25);
 }
@@ -268,3 +268,9 @@ dialog.settings button.link { padding: 7px 0; color: var(--muted); background: n
   max-width: 340px; padding: 4px 8px; font: inherit; color: var(--text);
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius);
 }
+
+dialog.settings .rule { display: grid; grid-template-columns: 1fr 1fr 1.6fr 1fr auto; gap: 6px; align-items: center; }
+dialog.settings .rule input, dialog.settings .rule select { min-width: 0; }
+dialog.settings .rule .remove { padding: 4px 8px; color: var(--muted); background: none; border: 0; font-weight: 400; }
+dialog.settings .rule .remove:hover { color: var(--client); }
+dialog.settings button.add-rule { justify-self: start; text-align: left; }

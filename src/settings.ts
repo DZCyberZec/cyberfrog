@@ -9,6 +9,17 @@ export type Settings = {
   use_sitemaps: boolean;
   /** Regular expressions; URLs matching any of them are not crawled. */
   exclude: string[];
+  /** Custom extraction and search rules, applied to every HTML page. */
+  rules: RuleSpec[];
+};
+
+/** Mirrors `RuleSpec` in src-tauri/src/lib.rs. */
+export type RuleSpec = {
+  name: string;
+  /** css: element text or `attr`; regex: first group or whole match; search: count of a literal text. */
+  kind: "css" | "regex" | "search";
+  expr: string;
+  attr: string | null;
 };
 
 export const USER_AGENTS: { id: string; label: string; value: string }[] = [
@@ -36,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   check_images: true,
   use_sitemaps: true,
   exclude: [],
+  rules: [],
 };
 
 const KEY = "cyberfrog.settings";

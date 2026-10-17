@@ -96,6 +96,14 @@ button { font: inherit; }
   background: var(--sunken); border: 1px dashed var(--border-strong);
 }
 .toolbar form button.list-pick:hover:not(:disabled) { background: var(--surface); border-color: var(--accent); }
+dialog.schedules { width: min(600px, calc(100vw - 32px)); }
+dialog.settings .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.schedule-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius); }
+.schedule-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.schedule-list li + li { border-top: 1px solid var(--border); }
+.schedule-list li > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.schedule-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schedule-list .muted { font-size: 12px; color: var(--muted); }
 dialog.list-dialog { width: min(640px, calc(100vw - 32px)); }
 .toolbar form button.stop { background: var(--client); color: #fff; }
 .toolbar form button.stop:hover:not(:disabled) { background: var(--client); filter: brightness(1.1); }

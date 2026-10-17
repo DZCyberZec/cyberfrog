@@ -2,6 +2,7 @@ mod ai;
 pub mod crawler;
 pub mod mcp;
 pub mod report;
+pub mod schedule;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -253,6 +254,28 @@ async fn ai_complete(system: String, prompt: String) -> Result<String, String> {
     ai::complete(&system, &prompt).await
 }
 
+#[tauri::command]
+fn list_schedules() -> Vec<schedule::Schedule> {
+    schedule::load()
+}
+
+/// Weekday 0 = every day, 1–7 = Monday–Sunday; `settings` is the UI's crawl settings.
+#[tauri::command]
+fn add_schedule(
+    url: String,
+    settings: serde_json::Value,
+    weekday: u8,
+    hour: u8,
+    lang: String,
+) -> Result<Vec<schedule::Schedule>, String> {
+    schedule::add(&url, settings, weekday, hour, &lang)
+}
+
+#[tauri::command]
+fn remove_schedule(id: String) -> Result<Vec<schedule::Schedule>, String> {
+    schedule::remove(&id)
+}
+
 /// The browser JavaScript rendering would use, for the settings dialog.
 #[tauri::command]
 fn find_browser() -> Option<String> {
@@ -310,6 +333,9 @@ pub fn run() {
             save_crawl_as,
             list_crawls,
             find_browser,
+            list_schedules,
+            add_schedule,
+            remove_schedule,
             ai_has_key,
             ai_set_key,
             ai_complete,

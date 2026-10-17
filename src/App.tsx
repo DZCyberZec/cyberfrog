@@ -9,6 +9,7 @@ import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { ListDialog, countUrls } from "./ListDialog";
+import { SchedulesDialog } from "./SchedulesDialog";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
 import { planPrompt } from "./ai";
 import { SiteStructure } from "./SiteStructure";
@@ -486,6 +487,7 @@ export default function App() {
   const [mode, setMode] = useState<"spider" | "list">("spider");
   const [listText, setListText] = useState("");
   const [listOpen, setListOpen] = useState(false);
+  const [schedulesOpen, setSchedulesOpen] = useState(false);
   const listCount = countUrls(listText);
   const [hasAiKey, setHasAiKey] = useState(false);
   useEffect(() => {
@@ -758,6 +760,9 @@ export default function App() {
           <button type="button" className="ghost" onClick={() => setSettingsOpen(true)} disabled={running}>
             {tr("Impostazioni")}
           </button>
+          <button type="button" className="ghost" onClick={() => setSchedulesOpen(true)}>
+            {tr("Pianifica")}
+          </button>
           <button type="button" className="ghost" onClick={() => openCrawl()} disabled={running}>
             {tr("Apri…")}
           </button>
@@ -767,6 +772,7 @@ export default function App() {
         </div>
       </header>
       <div className={`progress ${running ? "on" : ""}`} aria-hidden />
+      <SchedulesDialog open={schedulesOpen} url={url} settings={settings} onClose={() => setSchedulesOpen(false)} />
       <ListDialog
         open={listOpen}
         text={listText}

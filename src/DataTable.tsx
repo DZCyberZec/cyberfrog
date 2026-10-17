@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
@@ -37,6 +37,8 @@ type Props<T extends RowData> = {
   exportName: string;
   onRowClick?: (row: T) => void;
   isSelected?: (row: T) => boolean;
+  /** Extra buttons shown next to the CSV export. */
+  actions?: ReactNode;
 };
 
 /** Filter chips, CSV export and a sortable, virtualized table. Give it a `key` per report. */
@@ -47,6 +49,7 @@ export function DataTable<T extends RowData>({
   exportName,
   onRowClick,
   isSelected,
+  actions,
 }: Props<T>) {
   const [filterId, setFilterId] = useState(filters?.[0]?.id);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
@@ -99,6 +102,7 @@ export function DataTable<T extends RowData>({
             {exportMsg}
           </span>
         )}
+        {actions}
         <button type="button" className="secondary" onClick={exportCsv} disabled={rows.length === 0}>
           Esporta CSV
         </button>

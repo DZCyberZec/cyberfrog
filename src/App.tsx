@@ -10,6 +10,8 @@ import {
   CODE_FILTERS,
   IMAGE_FILTERS,
   LARGE_IMAGE_BYTES,
+  SITEMAP_FILTERS,
+  buildSitemapXml,
   codeLabel,
   formatBytes,
   kindOf,
@@ -74,6 +76,15 @@ const codeColumns = page.columns([
   page.accessor("redirect_to", { header: "Redirect a", size: 360 }),
   page.accessor("content_type", { header: "Content type", size: 180 }),
   page.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
+]);
+
+const sitemapColumns = page.columns([
+  page.accessor("url", { header: "URL", size: 460 }),
+  statusColumn,
+  indexableColumn,
+  page.accessor((p) => (p.in_sitemap ? "Sì" : "No"), { id: "in_sitemap", header: "Nella sitemap", size: 120 }),
+  page.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
+  page.accessor("depth", { header: "Profondità", size: 95, cell: (c) => num(c.getValue()) }),
 ]);
 
 const indexColumns = page.columns([
@@ -154,7 +165,7 @@ const metaTabs = CHECKS.map((check) => ({
   ]),
 }));
 
-type Tab = "internal" | "codes" | "index" | "external" | "broken" | "images" | Check["field"];
+type Tab = "internal" | "codes" | "index" | "external" | "broken" | "images" | "sitemap" | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
   { id: "internal", label: "Interni" },
   { id: "codes", label: "Codici di risposta" },
@@ -162,6 +173,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "external", label: "Link esterni" },
   { id: "broken", label: "Link rotti" },
   { id: "images", label: "Immagini" },
+  { id: "sitemap", label: "Sitemap" },
   ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
 ];
 
@@ -249,6 +261,19 @@ export default function App() {
     try {
       show(await invoke<CrawlData>("open_crawl", { path: picked }));
       setElapsed(null);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  async function saveSitemap() {
+    setError(null);
+    setNotice(null);
+    const to = await save({ defaultPath: "sitemap.xml", filters: [{ name: "Sitemap XML", extensions: ["xml"] }] });
+    if (!to) return;
+    try {
+      await invoke("write_text_file", { path: to, contents: buildSitemapXml(pages) });
+      setNotice(`Sitemap salvata in ${to}`);
     } catch (err) {
       setError(String(err));
     }
@@ -442,6 +467,21 @@ export default function App() {
                 columns={metaTab.columns}
                 filters={metaTab.filters}
                 exportName={`${host}-${tab.replace("_", "-")}`}
+                {...selectByUrl}
+              />
+            )}
+            {tab === "sitemap" && (
+              <DataTable
+                key="sitemap"
+                data={pages}
+                columns={sitemapColumns}
+                filters={SITEMAP_FILTERS}
+                exportName={`${host}-sitemap`}
+                actions={
+                  <button type="button" className="secondary" onClick={saveSitemap}>
+                    Genera sitemap XML
+                  </button>
+                }
                 {...selectByUrl}
               />
             )}

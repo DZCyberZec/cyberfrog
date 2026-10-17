@@ -1,13 +1,13 @@
 // Self-check for filters and CSV export. Run: node scripts/pages.check.ts
 import assert from "node:assert/strict";
 import {
-  BROKEN_FILTERS, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
+  BROKEN_FILTERS, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
 } from "../src/pages.ts";
 
 const base: Page = {
   url: "", depth: 0, status: 200, content_type: "text/html", redirect_to: null, blocked_by_robots: false,
   error: null, title: null, meta_description: null, h1: null, canonical: null, meta_robots: null,
-  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0,
+  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0, in_sitemap: false,
 };
 const pages: Page[] = [
   { ...base, url: "/a", title: "Same title for both pages here!" },
@@ -96,4 +96,21 @@ assert.deepEqual(pick(imgs, IMAGE_FILTERS, "large"), ["heavy"], "exactly 100 KB 
 assert.deepEqual(pick(imgs, IMAGE_FILTERS, "missing-alt"), ["noalt"]);
 assert.deepEqual(pick(imgs, IMAGE_FILTERS, "errors"), ["broken", "unreachable"]);
 assert.deepEqual([formatBytes(850), formatBytes(12595), formatBytes(1468006), formatBytes(null)], ["850 B", "12,3 KB", "1,4 MB", ""]);
+const sm: Page[] = [
+  { ...base, url: "https://s.it/", depth: 0, in_sitemap: true },
+  { ...base, url: "https://s.it/linked", depth: 1, inlinks: 3, in_sitemap: true },
+  { ...base, url: "https://s.it/orphan", depth: null, in_sitemap: true },
+  { ...base, url: "https://s.it/forgot", depth: 2, inlinks: 1 },
+  { ...base, url: "https://s.it/noidx", depth: 1, inlinks: 1, in_sitemap: true, meta_robots: "noindex" },
+  { ...base, url: "https://s.it/q?a=1&b=<2>", depth: 1, inlinks: 1 },
+  { ...base, url: "https://s.it/old", depth: 1, inlinks: 1, status: 301 },
+];
+const smShort = (id: string) => pick(sm, SITEMAP_FILTERS, id).map((u) => u.slice(12));
+assert.deepEqual(smShort("orphan"), ["/orphan"], "the start URL is never an orphan");
+assert.deepEqual(smShort("missing"), ["/forgot", "/q?a=1&b=<2>"]);
+assert.deepEqual(smShort("non-indexable"), ["/noidx"]);
+const xml = buildSitemapXml(sm);
+assert.ok(xml.includes("<loc>https://s.it/q?a=1&amp;b=&lt;2&gt;</loc>"), xml);
+assert.ok(!xml.includes("/noidx") && !xml.includes("/old"), "only indexable 200 HTML pages");
+assert.equal((xml.match(/<url>/g) ?? []).length, 5);
 console.log("pages.check: ok");

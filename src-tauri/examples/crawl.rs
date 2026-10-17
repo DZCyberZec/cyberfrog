@@ -17,6 +17,7 @@ async fn main() -> cyberfrog_lib::crawler::CrawlResult<()> {
             max_urls: 10_000,
             check_external: true,
             check_images: true,
+            use_sitemaps: true,
         },
         &out,
         |p| eprint!("\r{} URL, {} in coda   ", p.done, p.pending),

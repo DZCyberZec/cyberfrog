@@ -1,7 +1,8 @@
 /** Mirrors `crawler::Page` in src-tauri/src/crawler.rs. */
 export type Page = {
   url: string;
-  depth: number;
+  /** Link depth from the start URL; null when found only through a sitemap. */
+  depth: number | null;
   status: number | null;
   content_type: string | null;
   redirect_to: string | null;
@@ -17,6 +18,7 @@ export type Page = {
   x_robots_tag: string | null;
   outlinks: number;
   external_outlinks: number;
+  in_sitemap: boolean;
 };
 
 /** Mirrors `report::ExternalLink`, `BrokenLink`, `LinkRow` and `PageLinks` in src-tauri/src/report.rs. */
@@ -250,4 +252,38 @@ export function formatBytes(n: number | null): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${kb.format(n / 1024)} KB`;
   return `${kb.format(n / 1024 / 1024)} MB`;
+}
+
+export const SITEMAP_FILTERS: FilterDef<Page>[] = [
+  { id: "all", label: "Tutti", test: () => true },
+  { id: "listed", label: "Nella sitemap", test: (p) => p.in_sitemap },
+  {
+    id: "missing",
+    label: "Indicizzabili non nella sitemap",
+    test: (p) => !p.in_sitemap && isHtmlPage(p) && nonIndexableReason(p) === null,
+  },
+  { id: "orphan", label: "Orfane (nessun inlink)", test: (p) => p.in_sitemap && p.inlinks === 0 && p.depth !== 0 },
+  {
+    id: "non-indexable",
+    label: "Non indicizzabili nella sitemap",
+    test: (p) => p.in_sitemap && nonIndexableReason(p) !== null,
+  },
+];
+
+const xmlEscape = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+
+/** A sitemap.xml listing the indexable HTML pages, in crawl order. */
+// shortcut: one file, fine up to the 50,000-URL sitemap limit; split into an index past that
+export function buildSitemapXml(pages: Page[]): string {
+  const urls = pages
+    .filter((p) => isHtmlPage(p) && nonIndexableReason(p) === null)
+    .map((p) => `  <url><loc>${xmlEscape(p.url)}</loc></url>`);
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...urls,
+    "</urlset>",
+    "",
+  ].join("\n");
 }

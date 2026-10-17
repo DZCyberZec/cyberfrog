@@ -28,11 +28,17 @@ pub struct Config {
     pub check_external: bool,
     /// After the crawl, request every image once to record its status and weight.
     pub check_images: bool,
+    /// Read the XML sitemaps (from robots.txt, else /sitemap.xml) and also crawl URLs found only there.
+    pub use_sitemaps: bool,
 }
+
+/// Link depth from the start URL; `None` for URLs reached only through a sitemap.
+type Depth = Option<u32>;
+const MAX_SITEMAP_FILES: usize = 50;
 
 struct Fetched {
     url: Url,
-    depth: u32,
+    depth: Depth,
     status: Option<u16>,
     content_type: Option<String>,
     /// All X-Robots-Tag header values, comma-joined.
@@ -77,7 +83,7 @@ struct Link {
 #[derive(Debug, PartialEq, serde::Serialize)]
 pub struct Page {
     pub url: String,
-    pub depth: u32,
+    pub depth: Depth,
     pub status: Option<u16>,
     pub content_type: Option<String>,
     pub redirect_to: Option<String>,
@@ -96,6 +102,8 @@ pub struct Page {
     pub outlinks: u32,
     /// Distinct external URLs this page links to.
     pub external_outlinks: u32,
+    /// Listed in one of the site's XML sitemaps.
+    pub in_sitemap: bool,
 }
 
 /// Crawl progress within a stage: items finished, and items waiting or in flight.
@@ -143,10 +151,15 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
     } else {
         ("(SELECT count(*) FROM links WHERE source = pages.url)", "0")
     };
+    let in_sitemap = if db.prepare("SELECT url FROM sitemap LIMIT 0").is_ok() {
+        "EXISTS (SELECT 1 FROM sitemap WHERE sitemap.url = pages.url)"
+    } else {
+        "0"
+    };
     let mut stmt = db.prepare(&format!(
         "SELECT url, depth, status, content_type, redirect_to, blocked_by_robots, error,
                 title, meta_description, h1, canonical, meta_robots, word_count,
-                (SELECT count(*) FROM links WHERE target = pages.url), {x_robots}, {outlinks}, {external}
+                (SELECT count(*) FROM links WHERE target = pages.url), {x_robots}, {outlinks}, {external}, {in_sitemap}
          FROM pages ORDER BY rowid"
     ))?;
     stmt.query_map([], |r| {
@@ -168,6 +181,7 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
             x_robots_tag: r.get(14)?,
             outlinks: r.get(15)?,
             external_outlinks: r.get(16)?,
+            in_sitemap: r.get(17)?,
         })
     })?
     .collect()
@@ -179,7 +193,7 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
         "PRAGMA journal_mode = WAL;
          CREATE TABLE IF NOT EXISTS pages (
              url               TEXT PRIMARY KEY,
-             depth             INTEGER NOT NULL,
+             depth             INTEGER,
              status            INTEGER,
              content_type      TEXT,
              redirect_to       TEXT,
@@ -201,6 +215,10 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              PRIMARY KEY (source, target)
          ) WITHOUT ROWID;
          CREATE INDEX IF NOT EXISTS links_target ON links (target);
+         CREATE TABLE IF NOT EXISTS sitemap (
+             url  TEXT PRIMARY KEY,
+             file TEXT NOT NULL
+         );
          CREATE TABLE IF NOT EXISTS images (
              page     TEXT NOT NULL,
              src      TEXT NOT NULL,
@@ -261,14 +279,34 @@ pub async fn crawl(
         .redirect(Policy::none()) // redirects are recorded as rows, their targets queued
         .timeout(Duration::from_secs(20))
         .build()?;
-    let robot = load_robots(&client, &cfg.start).await;
+    // robots.txt and sitemaps may redirect (http -> https, www), so they follow redirects
+    let follow = Client::builder()
+        .user_agent(USER_AGENT)
+        .timeout(Duration::from_secs(20))
+        .build()?;
+    let robot = load_robots(&follow, &cfg.start).await;
     let mut db = open_db(db_path)?;
     let concurrency = cfg.concurrency.max(1);
+
+    // URLs listed only in a sitemap are queued once link discovery runs dry
+    let mut sitemap_seed = None;
+    if cfg.use_sitemaps {
+        let listed = load_sitemaps(&follow, &cfg.start, robot.as_ref(), cfg.max_urls).await;
+        let tx = db.transaction()?;
+        for (url, file) in &listed {
+            tx.execute(
+                "INSERT OR IGNORE INTO sitemap (url, file) VALUES (?1, ?2)",
+                params![url.as_str(), file],
+            )?;
+        }
+        tx.commit()?;
+        sitemap_seed = Some(listed.into_iter().map(|(url, _)| url));
+    }
 
     let mut start = cfg.start.clone();
     start.set_fragment(None);
     let mut seen = HashSet::from([start.to_string()]);
-    let mut queue = VecDeque::from([(start, 0u32)]);
+    let mut queue: VecDeque<(Url, Depth)> = VecDeque::from([(start, Some(0))]);
     let mut tasks = JoinSet::new();
     let mut written = 0;
 
@@ -293,7 +331,18 @@ pub async fn crawl(
         }
 
         let Some(joined) = tasks.join_next().await else {
-            break;
+            for url in sitemap_seed.take().into_iter().flatten() {
+                if same_site(&url, &cfg.start)
+                    && seen.len() < cfg.max_urls
+                    && seen.insert(url.to_string())
+                {
+                    queue.push_back((url, None));
+                }
+            }
+            if queue.is_empty() {
+                break;
+            }
+            continue;
         };
         let page = joined?;
         let is_html = page.html.is_some();
@@ -375,7 +424,7 @@ pub async fn crawl(
             .chain(internal.into_iter().map(|l| l.url))
         {
             if seen.len() < cfg.max_urls && seen.insert(link.to_string()) {
-                queue.push_back((link, page.depth + 1));
+                queue.push_back((link, page.depth.map(|d| d + 1)));
             }
         }
         on_progress(Progress {
@@ -597,7 +646,82 @@ async fn load_robots(client: &Client, start: &Url) -> Option<Robot> {
     Robot::new(ROBOTS_AGENT, &body).ok()
 }
 
-async fn fetch(client: Client, url: Url, depth: u32) -> Fetched {
+/// Every `<loc>` in the site's sitemaps, with the sitemap file listing it. Sitemap indexes are
+/// followed; files that fail to load are skipped. Uses robots.txt `Sitemap:` lines, else /sitemap.xml.
+async fn load_sitemaps(
+    client: &Client,
+    start: &Url,
+    robot: Option<&Robot>,
+    max_urls: usize,
+) -> Vec<(Url, String)> {
+    // robots.txt should list absolute URLs, but relative ones are common enough to accept
+    let declared: Vec<String> = robot
+        .map(|r| {
+            r.sitemaps
+                .iter()
+                .filter_map(|s| start.join(s.trim()).ok())
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut files: VecDeque<String> = if declared.is_empty() {
+        start
+            .join("/sitemap.xml")
+            .map(|u| vec![u.to_string()])
+            .unwrap_or_default()
+            .into()
+    } else {
+        declared.into()
+    };
+    let mut fetched = HashSet::new();
+    let mut out = Vec::new();
+    while let Some(file) = files.pop_front() {
+        if fetched.len() >= MAX_SITEMAP_FILES || out.len() >= max_urls {
+            break;
+        }
+        if !fetched.insert(file.clone()) {
+            continue;
+        }
+        let Ok(resp) = client.get(&file).send().await else {
+            continue;
+        };
+        if !resp.status().is_success() {
+            continue;
+        }
+        let Ok(body) = resp.text().await else {
+            continue;
+        };
+        let is_index = body.contains("<sitemapindex");
+        for loc in xml_locs(&body) {
+            if is_index {
+                files.push_back(loc);
+            } else if let Ok(url) = Url::parse(&loc) {
+                out.push((normalize(url), file.clone()));
+            }
+        }
+    }
+    out.truncate(max_urls);
+    out
+}
+
+/// `<loc>` values of a sitemap or sitemap index, with XML entities decoded.
+// shortcut: string scan, not an XML parser; misses CDATA, prefixed tags and gzipped .xml.gz files
+fn xml_locs(xml: &str) -> Vec<String> {
+    xml.split("<loc>")
+        .skip(1)
+        .filter_map(|rest| rest.split("</loc>").next())
+        .map(|l| {
+            l.trim()
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&apos;", "'")
+                .replace("&amp;", "&")
+        })
+        .collect()
+}
+
+async fn fetch(client: Client, url: Url, depth: Depth) -> Fetched {
     let mut page = Fetched {
         url,
         depth,
@@ -824,7 +948,7 @@ mod tests {
         p
     }
 
-    type Row = (String, u32, Option<u16>, Option<String>, bool, u32);
+    type Row = (String, Option<u32>, Option<u16>, Option<String>, bool, u32);
 
     fn rows(path: &Path) -> Vec<Row> {
         let mut rows: Vec<Row> = read_pages(path)
@@ -855,6 +979,7 @@ mod tests {
             max_urls: 100,
             check_external: false,
             check_images: false,
+            use_sitemaps: false,
         };
 
         let mut progress = Vec::new();
@@ -865,12 +990,12 @@ mod tests {
         assert_eq!(
             rows(&path),
             vec![
-                (u("/"), 0, Some(200), None, false, 1),
-                (u("/a"), 1, Some(200), None, false, 1), // its own /a#s self-link is not counted
-                (u("/missing"), 2, Some(404), None, false, 1),
-                (u("/new"), 2, Some(200), None, false, 0), // reached only through a redirect
-                (u("/old"), 1, Some(301), Some(u("/new")), false, 1),
-                (u("/private/x"), 1, None, None, true, 1),
+                (u("/"), Some(0), Some(200), None, false, 1),
+                (u("/a"), Some(1), Some(200), None, false, 1), // its own /a#s self-link is not counted
+                (u("/missing"), Some(2), Some(404), None, false, 1),
+                (u("/new"), Some(2), Some(200), None, false, 0), // reached only through a redirect
+                (u("/old"), Some(1), Some(301), Some(u("/new")), false, 1),
+                (u("/private/x"), Some(1), None, None, true, 1),
             ]
         );
         let pages = read_pages(&path).unwrap();
@@ -924,6 +1049,7 @@ mod tests {
             max_urls: 100,
             check_external: false,
             check_images: false,
+            use_sitemaps: false,
         };
         crawl(cfg, &path, |_| {}).await.unwrap();
 
@@ -1057,6 +1183,7 @@ mod tests {
             max_urls: 100,
             check_external: true,
             check_images: false,
+            use_sitemaps: false,
         };
         let mut progress = Vec::new();
         crawl(cfg, &path, |p| progress.push(p)).await.unwrap();
@@ -1178,6 +1305,7 @@ mod tests {
             max_urls: 100,
             check_external: false,
             check_images: true,
+            use_sitemaps: false,
         };
         let mut progress = Vec::new();
         crawl(cfg, &path, |p| progress.push(p)).await.unwrap();
@@ -1246,6 +1374,88 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reads_sitemaps_and_crawls_urls_found_only_there() {
+        type SitemapRow = (String, Option<u32>, Option<u16>, bool, bool, u32);
+        const HTML: &str = "Content-Type: text/html\r\n";
+        const XML: &str = "Content-Type: application/xml\r\n";
+        // sitemap locs are absolute, so the handler learns its own address after binding
+        let base = std::sync::Arc::new(std::sync::OnceLock::<String>::new());
+        let b = base.clone();
+        let site = serve_with(move |_, path| {
+            let b = b.get().unwrap();
+            match path {
+                "/robots.txt" => http("200 OK", "", "User-agent: *\nDisallow: /private\nSitemap: /sm-index.xml\n"),
+                "/sm-index.xml" => http(
+                    "200 OK",
+                    XML,
+                    &format!(
+                        "<sitemapindex><sitemap><loc>{b}sm1.xml</loc></sitemap>\
+                         <sitemap><loc>{b}missing.xml</loc></sitemap></sitemapindex>"
+                    ),
+                ),
+                "/sm1.xml" => http(
+                    "200 OK",
+                    XML,
+                    &format!(
+                        "<urlset><url><loc>{b}</loc></url><url><loc> {b}linked </loc></url>\
+                         <url><loc>{b}orphan</loc></url><url><loc>{b}private/p</loc></url>\
+                         <url><loc>{b}q?a=1&amp;b=2</loc></url><url><loc>http://other.invalid/x</loc></url></urlset>"
+                    ),
+                ),
+                "/" => http("200 OK", HTML, r#"<a href="/linked">l</a>"#),
+                "/linked" | "/orphan-child" => http("200 OK", HTML, "ok"),
+                "/orphan" => http("200 OK", HTML, r#"<a href="/orphan-child">c</a>"#),
+                _ => http("404 Not Found", HTML, "nope"),
+            }
+        })
+        .await;
+        base.set(site.to_string()).unwrap();
+
+        let path = db_path("sitemap");
+        let cfg = Config {
+            start: site.clone(),
+            concurrency: 4,
+            max_urls: 100,
+            check_external: false,
+            check_images: false,
+            use_sitemaps: true,
+        };
+        crawl(cfg, &path, |_| {}).await.unwrap();
+
+        let u = |p: &str| site.join(p).unwrap().to_string();
+        let mut got: Vec<SitemapRow> = read_pages(&path)
+            .unwrap()
+            .into_iter()
+            .map(|p| {
+                (
+                    p.url,
+                    p.depth,
+                    p.status,
+                    p.blocked_by_robots,
+                    p.in_sitemap,
+                    p.inlinks,
+                )
+            })
+            .collect();
+        got.sort();
+        let mut expected = vec![
+            (u("/"), Some(0), Some(200), false, true, 0),
+            (u("/linked"), Some(1), Some(200), false, true, 1),
+            (u("/orphan"), None, Some(200), false, true, 0), // in the sitemap, linked from nowhere
+            (u("/orphan-child"), None, Some(200), false, false, 1),
+            (u("/private/p"), None, None, true, true, 0),
+            (u("/q?a=1&b=2"), None, Some(404), false, true, 0), // &amp; decoded
+        ];
+        expected.sort();
+        assert_eq!(got, expected);
+        let listed: u32 = Connection::open(&path)
+            .unwrap()
+            .query_row("SELECT count(*) FROM sitemap", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(listed, 6, "cross-host locs are recorded but not crawled");
+    }
+
+    #[tokio::test]
     async fn stops_at_max_urls() {
         let base = serve().await;
         let path = db_path("limit");
@@ -1255,6 +1465,7 @@ mod tests {
             max_urls: 2,
             check_external: false,
             check_images: false,
+            use_sitemaps: false,
         };
 
         assert_eq!(crawl(cfg, &path, |_| {}).await.unwrap(), 2);

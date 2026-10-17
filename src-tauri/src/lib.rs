@@ -79,6 +79,7 @@ async fn start_crawl(
         max_urls: MAX_URLS,
         check_external: true,
         check_images: true,
+        use_sitemaps: true,
     };
     crawler::crawl(cfg, &db_path, |p| {
         let _ = on_progress.send(p); // a closed window just stops listening

@@ -1,7 +1,7 @@
 {
   "name": "cyberfrog",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "CyberFrog – Another SEO Tool: desktop SEO crawler",
   "author": "Daniele Zecca – CyberZec (https://cyberzec.it)",
   "license": "Apache-2.0",

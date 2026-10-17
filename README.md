@@ -43,6 +43,10 @@
   - llms.txt presence and format, and Content-Signal preferences
   - a 0–100 citability score per page: answer up front, question subheadings, lists and tables, facts, author, date, sources, structured data
   - pages AI crawlers can't read because their content is built by JavaScript
+- **Topics & links**: local TF-IDF analysis of titles, H1s and text:
+  - topic clusters built around their strongest page (the hub)
+  - pages that cannibalize each other's searches, with the words they share
+  - the internal links to add, with suggested anchor text
 - **MCP server**: Claude and other assistants can run crawls and query the data (see below).
 - **Export and reuse**: CSV export of any view (Excel-friendly), crawls saved as single SQLite files you can save, reopen and query.
 - **English and Italian** interface.

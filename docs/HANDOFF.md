@@ -54,6 +54,7 @@ docs/clean-room-map.md     funzionalità di riferimento
 9. **Dati strutturati:** JSON-LD (anche `@graph`) e microdata; JSON non valido; proprietà richieste da Google mancanti per alcuni tipi.
 10. **Contenuti duplicati:** `content_hash` (FNV-1a) e SimHash a 64 bit del testo principale (senza nav e footer). Tab Duplicati con duplicati esatti, quasi duplicati (≥ 90%, al massimo 6 bit diversi) e contenuto scarso (< 200 parole), solo su pagine indicizzabili. Confronto di tutte le coppie in TS: va bene fino a ~10k pagine.
 11. **Branding e controllo:** sottotitolo "Another SEO Tool", barra di stato sempre visibile con "Powered by Daniele Zecca – CyberZec" (scudo CyberZec in `src/assets/`, apre cyberzec.it), pulsante **Stop** (flag condiviso `CrawlStop`, i dati raccolti restano).
+13. **v0.2.0 (ispirata a Screaming Frog 24, da note pubbliche):** link non scansionabili e URL non validi (tab + 2 problemi); confronto tra crawl (tab Confronto, automatico col crawl precedente dello stesso host, menu per cambiarlo; `compareCrawls`/`allIssues` in `src/pages.ts`); server MCP integrato `cyberfrog --mcp` (`src-tauri/src/mcp.rs`: crawl_site, list_crawls, crawl_summary, query_crawl in sola lettura, page_details).
 12. **Tab Problemi** (predefinito): elenco di tutti i problemi con priorità Alta/Media/Bassa, numero di URL e cosa fare. Clic → apre il report con il filtro già selezionato (`ISSUES` in `src/pages.ts`). Title/meta/H1 e canonical mancante sono valutati solo sulle pagine indicizzabili.
 
 ## Roadmap

@@ -11,6 +11,7 @@ const {
 const { hasTranslation } = await import("../src/i18n.ts");
 const { pageIssues, withExamples } = await import("../src/pages.ts");
 const { systemPrompt, metaPrompt, explainPrompt, planPrompt } = await import("../src/ai.ts");
+const { EMPTY_GEO, geoFilters, geoRows, botState, CITABILITY, PURPOSE_LABEL } = await import("../src/geo.ts");
 
 const base: Page = {
   url: "", depth: 0, status: 200, content_type: "text/html", redirect_to: null, blocked_by_robots: false,
@@ -217,15 +218,18 @@ const tabsWithFilters: Record<string, string[]> = {
   h1: metaFilters(CHECKS[2]).map((f) => f.id), images: IMAGE_FILTERS.map((f) => f.id), perf: PERF_FILTERS.map((f) => f.id),
   sitemap: SITEMAP_FILTERS.map((f) => f.id), schema: schemaFilters([]).map((f) => f.id), hreflang: HREFLANG_FILTERS.map((f) => f.id),
   duplicates: DUP_FILTERS.map((f) => f.id), badlinks: BAD_LINK_FILTERS.map((f) => f.id),
-  redirects: REDIRECT_FILTERS.map((f) => f.id), js: JS_FILTERS.map((f) => f.id),
+  redirects: REDIRECT_FILTERS.map((f) => f.id), js: JS_FILTERS.map((f) => f.id), geo: geoFilters(EMPTY_GEO).map((f) => f.id),
 };
 for (const d of ISSUES) assert.ok(tabsWithFilters[d.tab]?.includes(d.filter), `issue ${d.label} points to a real filter`);
 const labels = [
   ...ISSUES.flatMap((d) => [d.label, d.fix, d.priority]),
   ...[CODE_FILTERS, BROKEN_FILTERS, CHANGE_FILTERS, REDIRECT_FILTERS, BAD_LINK_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, JS_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
-      indexFilters([]), schemaFilters([]), ...CHECKS.map(metaFilters)].flat().map((f) => f.label),
+      indexFilters([]), schemaFilters([]), geoFilters(EMPTY_GEO), CITABILITY, ...CHECKS.map(metaFilters)].flat().map((f) => f.label),
+  ...Object.values(PURPOSE_LABEL),
+  // llms.txt problems come from Rust in Italian
+  "È una pagina HTML, non un file Markdown", "Manca il titolo (# Nome del sito) nella prima riga", "Manca il riassunto (riga che inizia con >)", "Nessun link alle pagine importanti",
 ];
-const untranslated = [...new Set(labels)].filter((l) => !hasTranslation(l) && !/^(\d|Tutt|Oltre|Sotto|Contenuto scarso \()/.test(l));
+const untranslated = [...new Set(labels)].filter((l) => !hasTranslation(l) && !/^(\d|Tutt|Oltre|Sotto|Contenuto scarso \(|Citabilità sotto )/.test(l));
 assert.deepEqual(untranslated, [], "every issue and filter label has an English translation");
 assert.equal(badLinkReason("href su <span>"), "href su <span>");
 assert.equal(badLinkReason("URL non valido: invalid IPv6 address"), "URL non valido: invalid IPv6 address");
@@ -337,4 +341,37 @@ assert.match(systemPrompt(), /Write in Italian/);
 assert.match(metaPrompt(ap[0]), /Title: Home\n/);
 assert.match(explainPrompt(ap[1], pageIssues(ap[1].url, asnap)), /- \[Alta\] Title mancante/);
 assert.match(planPrompt("s.it", ap, withEx), /Title mancante: 2\..*Examples: https:\/\/s\.it\/a, https:\/\/s\.it\/b/);
+const sig = { first_para_words: 30, question_headings: 1, subheadings: 3, lists: 1, tables: 0, stats: 5, has_author: true, has_date: true, js_shell: false, blocked_bots: [] as string[] };
+const html = { ...base, status: 200, content_type: "text/html", word_count: 800, external_outlinks: 2 };
+const gp: Page[] = [
+  { ...html, url: "/top" },
+  { ...html, url: "/thin", word_count: 100, external_outlinks: 0 },
+  { ...html, url: "/shell" },
+  { ...html, url: "/noindex", meta_robots: "noindex" },
+];
+const gd = {
+  ...EMPTY_GEO,
+  bots: [
+    { token: "OAI-SearchBot", owner: "OpenAI", purpose: "search" as const, blocked_pages: 1 },
+    { token: "GPTBot", owner: "OpenAI", purpose: "training" as const, blocked_pages: 3 },
+  ],
+  pages: [
+    { ...sig, page: "/top" },
+    { ...sig, page: "/thin", first_para_words: 150, has_author: false, has_date: false, blocked_bots: ["OAI-SearchBot", "GPTBot"] },
+    { ...sig, page: "/shell", js_shell: true, blocked_bots: ["GPTBot"] },
+    { ...sig, page: "/noindex" },
+  ],
+};
+const gr = geoRows(gp, gd, [{ page: "/top", format: "json-ld", kind: "Article", issue: null }]);
+assert.deepEqual(gr.map((r) => [r.url, r.score]), [["/top", 100], ["/thin", 40], ["/shell", 95]], "noindex pages are left out; points add up");
+assert.deepEqual(gr[1].missingIds, ["answer", "depth", "author", "date", "sources", "schema"]);
+const gf = geoFilters(gd);
+const geoPick = (id: string) => gr.filter(gf.find((f) => f.id === id)!.test).map((r) => r.url);
+assert.deepEqual(geoPick("blocked-search"), ["/thin"], "only search and user bots count for AI answers");
+assert.deepEqual(geoPick("blocked-training"), ["/thin", "/shell"]);
+assert.deepEqual(geoPick("js-invisible"), ["/shell"]);
+assert.deepEqual(geoPick("low"), ["/thin"]);
+assert.deepEqual(geoPick("no-author-date"), ["/thin"]);
+assert.deepEqual([botState(gd.bots[0], 3), botState(gd.bots[1], 3), botState({ ...gd.bots[0], blocked_pages: 0 }, 3)], ["partial", "closed", "open"]);
+assert.ok(allIssues({ ...snap(gp), geo: gd }).some((i) => i.label === "Pagine chiuse ai motori di ricerca AI" && i.count === 1));
 console.log("pages.check: ok");

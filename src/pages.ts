@@ -1,4 +1,5 @@
 import { LOCALE, tr } from "./i18n.ts";
+import { EMPTY_GEO, geoFilters, geoRows, type GeoData } from "./geo.ts";
 
 /** Mirrors `crawler::Page` in src-tauri/src/crawler.rs. */
 export type Page = {
@@ -334,14 +335,16 @@ export function jsLinks(p: Page): number | null {
 /** Below this, extra rendered words are usually widgets or cookie banners, not content. */
 const JS_WORDS_MIN = 50;
 
+/** A meaningful share of the text appears only after rendering: a fifth, so a small JS widget on a long page doesn't count. */
+export const jsAddsContent = (p: Page) => (jsWords(p) ?? 0) >= Math.max(JS_WORDS_MIN, (p.word_count ?? 0) / 5);
+
 export const JS_FILTERS: FilterDef<Page>[] = [
   { id: "all", label: tr("Tutti"), test: (p) => p.rendered || p.render_error !== null },
   { id: "rendered", label: tr("Pagine renderizzate"), test: (p) => p.rendered },
   {
     id: "js-content",
     label: tr("Contenuto aggiunto da JavaScript"),
-    // a fifth of the text, so long pages with a small JS widget don't count
-    test: (p) => (jsWords(p) ?? 0) >= Math.max(JS_WORDS_MIN, (p.word_count ?? 0) / 5),
+    test: jsAddsContent,
   },
   { id: "js-links", label: tr("Link aggiunti da JavaScript"), test: (p) => (jsLinks(p) ?? 0) > 0 },
   { id: "errors", label: tr("Errori di rendering"), test: (p) => p.render_error !== null },
@@ -559,6 +562,11 @@ export const ISSUES: IssueDef[] = [
   { tab: "js", filter: "js-links", priority: "Media", label: tr("Link visibili solo dopo il rendering JavaScript"), fix: tr("Metti i link importanti nell'HTML del server: Google li trova solo dopo il rendering, più tardi e non sempre.") },
   { tab: "js", filter: "js-content", priority: "Bassa", label: tr("Contenuto visibile solo dopo il rendering JavaScript"), fix: tr("Rendi il contenuto principale lato server (SSR o pre-rendering) perché tutti i motori lo leggano subito.") },
   { tab: "js", filter: "errors", priority: "Bassa", label: tr("Pagine non renderizzate"), fix: tr("Il browser non ha completato il rendering: controlla errori JavaScript e tempi di caricamento.") },
+  { tab: "geo", filter: "blocked-search", priority: "Alta", label: tr("Pagine chiuse ai motori di ricerca AI"), fix: tr("Consenti in robots.txt i bot di ricerca AI (OAI-SearchBot, ChatGPT-User, Claude-SearchBot, PerplexityBot): senza, le pagine non compaiono nelle risposte di ChatGPT, Claude e Perplexity.") },
+  { tab: "geo", filter: "js-invisible", priority: "Media", label: tr("Contenuto invisibile ai crawler AI"), fix: tr("I crawler AI non eseguono JavaScript: rendi il contenuto lato server (SSR o pre-rendering).") },
+  { tab: "geo", filter: "low", priority: "Media", label: tr("Citabilità AI bassa"), fix: tr("Apri il report GEO: per ogni pagina mostra cosa aggiungere perché un'AI la citi.") },
+  { tab: "geo", filter: "no-answer", priority: "Bassa", label: tr("Senza risposta in apertura"), fix: tr("Apri la pagina con un paragrafo di 20–80 parole che risponde subito alla domanda principale.") },
+  { tab: "geo", filter: "no-author-date", priority: "Bassa", label: tr("Senza autore o data"), fix: tr("Indica autore e data di aggiornamento (anche nei dati strutturati): le AI preferiscono fonti attribuibili e recenti.") },
   { tab: "perf", filter: "slow", priority: "Media", label: tr("Pagine con risposta oltre 1 s"), fix: tr("Attiva cache e verifica hosting e query lente.") },
   { tab: "sitemap", filter: "orphan", priority: "Media", label: tr("Pagine orfane"), fix: tr("Linka queste pagine da altre pagine del sito.") },
   { tab: "sitemap", filter: "non-indexable", priority: "Media", label: tr("URL non indicizzabili nella sitemap"), fix: tr("La sitemap deve contenere solo pagine indicizzabili con risposta 200.") },
@@ -623,6 +631,8 @@ export type CrawlSnapshot = {
   hreflang: HreflangRow[];
   structured: StructuredRow[];
   bad_links: BadLinkRow[];
+  /** Missing in crawl files saved before GEO data existed. */
+  geo?: GeoData;
 };
 
 /** Every issue of a crawl. Pass `dups` from dupPages() to include duplicate content (it is costly). */
@@ -653,7 +663,9 @@ export function withExamples(issues: Issue[], d: CrawlSnapshot, dups: DupPage[] 
 
 function crawlReports(d: CrawlSnapshot, dups: DupPage[]): Reports {
   const schema = schemaPages(d.pages, d.structured);
+  const geo = d.geo ?? EMPTY_GEO;
   return {
+    geo: { rows: geoRows(d.pages, geo, d.structured), filters: geoFilters(geo) },
     codes: { rows: d.pages, filters: CODE_FILTERS },
     index: { rows: d.pages, filters: indexFilters(d.pages) },
     broken: { rows: d.broken, filters: BROKEN_FILTERS },

@@ -10,6 +10,8 @@ import { ImagePanel } from "./ImagePanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { ListDialog, countUrls } from "./ListDialog";
 import { SchedulesDialog } from "./SchedulesDialog";
+import { GeoReport } from "./GeoReport";
+import { EMPTY_GEO, geoRows, type GeoData } from "./geo";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
 import { isAiReady, type AiStatus } from "./AiSettings";
 import { planPrompt } from "./ai";
@@ -36,6 +38,7 @@ import {
   dupPages,
   allIssues,
   pageIssues,
+  isHtmlPage,
   withExamples,
   compareCrawls,
   CHANGE_FILTERS,
@@ -363,6 +366,7 @@ type Tab =
   | "images"
   | "sitemap"
   | "perf"
+  | "geo"
   | "js"
   | "hreflang"
   | "schema"
@@ -389,6 +393,10 @@ const GROUPS: { label: string; items: { id: Tab; label: string }[] }[] = [
       { id: "js", label: "JavaScript" },
       { id: "duplicates", label: tr("Duplicati") },
     ],
+  },
+  {
+    label: tr("AI e GEO"),
+    items: [{ id: "geo", label: tr("Visibilità nelle AI") }],
   },
   {
     label: tr("Contenuti"),
@@ -438,6 +446,7 @@ type CrawlData = {
   structured: StructuredRow[];
   bad_links: BadLinkRow[];
   custom: CustomData;
+  geo: GeoData;
 };
 /** Crawls listed on the start screen; older ones stay reachable with Apri… */
 const RECENT_SHOWN = 5;
@@ -462,6 +471,7 @@ export default function App() {
   const [structured, setStructured] = useState<StructuredRow[]>([]);
   const [badLinks, setBadLinks] = useState<BadLinkRow[]>([]);
   const [custom, setCustom] = useState<CustomData>({ rules: [], values: [] });
+  const [geo, setGeo] = useState<GeoData>(EMPTY_GEO);
   /** Crawl file the current crawl is compared with, and its loaded data. */
   const [baseline, setBaseline] = useState<string | null>(null);
   const [baselineData, setBaselineData] = useState<CrawlSnapshot | null>(null);
@@ -514,6 +524,7 @@ export default function App() {
     setStructured(data.structured);
     setBadLinks(data.bad_links);
     setCustom(data.custom);
+    setGeo(data.geo ?? EMPTY_GEO);
     setSelected(null);
     setSelectedImage(null);
     setCrawlPath(data.path);
@@ -648,9 +659,11 @@ export default function App() {
   const rows = useMemo(() => (metaTab ? metaRows(pages, metaTab.check.field) : []), [pages, metaTab]);
   // duplicates are only analysed on their tab and here; they never rank Alta, so the badge stays right
   const snapshot = useMemo(
-    (): CrawlSnapshot => ({ pages, broken, images, hreflang, structured, bad_links: badLinks }),
-    [pages, broken, images, hreflang, structured, badLinks],
+    (): CrawlSnapshot => ({ pages, broken, images, hreflang, structured, bad_links: badLinks, geo }),
+    [pages, broken, images, hreflang, structured, badLinks, geo],
   );
+  const geoTable = useMemo(() => geoRows(pages, geo, structured), [pages, geo, structured]);
+  const htmlPages = useMemo(() => pages.filter(isHtmlPage).length, [pages]);
   const issues = useMemo(() => allIssues(snapshot, dupRows), [snapshot, dupRows]);
   const redirectRows = useMemo(() => redirectChains(pages), [pages]);
   const selectedPage = useMemo(() => pages.find((p) => p.url === selected), [pages, selected]);
@@ -1122,6 +1135,17 @@ export default function App() {
                   columns={perfColumns}
                   filters={PERF_FILTERS}
                   exportName={`${host}-prestazioni`}
+                  {...selectByUrl}
+                />
+              )}
+              {tab === "geo" && (
+                <GeoReport
+                  key={`geo-${jump.seq}`}
+                  initialFilter={jump.tab === "geo" ? jump.filter ?? undefined : undefined}
+                  geo={geo}
+                  rows={geoTable}
+                  htmlPages={htmlPages}
+                  exportName={`${host}-geo`}
                   {...selectByUrl}
                 />
               )}

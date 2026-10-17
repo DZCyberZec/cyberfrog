@@ -94,6 +94,10 @@ struct HtmlData {
     canonical: Option<Url>,
     meta_robots: Option<String>,
     word_count: u32,
+    /// Fingerprint of the main-content words, equal for pages with identical text.
+    content_hash: Option<String>,
+    /// SimHash of the main-content words, close for pages with similar text.
+    simhash: Option<String>,
     links: Vec<Link>,
     images: Vec<Image>,
     /// `<link rel="alternate" hreflang>` annotations: (language code as written, target).
@@ -157,6 +161,10 @@ pub struct Page {
     pub response_ms: Option<u32>,
     /// Body size: bytes read for HTML, Content-Length for the rest.
     pub size_bytes: Option<i64>,
+    /// 16 hex digits; equal for pages whose main-content text is identical.
+    pub content_hash: Option<String>,
+    /// 16 hex digits of SimHash; few differing bits mean near-duplicate text.
+    pub simhash: Option<String>,
 }
 
 /// Crawl progress within a stage: items finished, and items waiting or in flight.
@@ -205,6 +213,7 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
         newer("response_ms"),
         newer("size_bytes"),
     );
+    let (content_hash, simhash) = (newer("content_hash"), newer("simhash"));
     // crawls saved before external links were stored count every link as same-site
     let (outlinks, external) = if db.prepare("SELECT external FROM links LIMIT 0").is_ok() {
         (
@@ -223,7 +232,7 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
         "SELECT url, depth, status, content_type, redirect_to, blocked_by_robots, error,
                 title, meta_description, h1, canonical, meta_robots, word_count,
                 (SELECT count(*) FROM links WHERE target = pages.url), {x_robots}, {outlinks}, {external}, {in_sitemap},
-                {response_ms}, {size_bytes}
+                {response_ms}, {size_bytes}, {content_hash}, {simhash}
          FROM pages ORDER BY rowid"
     ))?;
     stmt.query_map([], |r| {
@@ -248,6 +257,8 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
             in_sitemap: r.get(17)?,
             response_ms: r.get(18)?,
             size_bytes: r.get(19)?,
+            content_hash: r.get(20)?,
+            simhash: r.get(21)?,
         })
     })?
     .collect()
@@ -273,7 +284,9 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              word_count        INTEGER,
              x_robots_tag      TEXT,
              response_ms       INTEGER,
-             size_bytes        INTEGER
+             size_bytes        INTEGER,
+             content_hash      TEXT,
+             simhash           TEXT
          );
          CREATE TABLE IF NOT EXISTS links (
              source   TEXT NOT NULL,
@@ -444,8 +457,8 @@ pub async fn crawl(
         tx.execute(
             "INSERT OR IGNORE INTO pages (url, depth, status, content_type, redirect_to, error,
                  title, meta_description, h1, canonical, meta_robots, word_count, x_robots_tag,
-                 response_ms, size_bytes)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                 response_ms, size_bytes, content_hash, simhash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 page.url.as_str(),
                 page.depth,
@@ -462,6 +475,8 @@ pub async fn crawl(
                 page.x_robots_tag,
                 page.response_ms,
                 page.size_bytes,
+                html.content_hash,
+                html.simhash,
             ],
         )?;
         {
@@ -1021,6 +1036,7 @@ fn structured_data(doc: &Html) -> Vec<Structured> {
 // shortcut: ignores <base href>, add it when a site needs it
 fn parse_html(base: &Url, html: &str) -> HtmlData {
     let doc = Html::parse_document(html);
+    let words = content_words(&doc);
     let first_text = |sel: &Selector| doc.select(sel).next().and_then(|e| squash(e.text()));
     let meta = |name: &str| {
         doc.select(&META)
@@ -1047,7 +1063,10 @@ fn parse_html(base: &Url, html: &str) -> HtmlData {
         h1: first_text(&H1),
         canonical,
         meta_robots: meta("robots"),
-        word_count: word_count(&doc),
+        word_count: words.len() as u32,
+        content_hash: (!words.is_empty())
+            .then(|| format!("{:016x}", fnv64(words.join(" ").as_bytes()))),
+        simhash: (!words.is_empty()).then(|| format!("{:016x}", simhash(&words))),
         links: doc
             .select(&ANCHORS)
             .filter_map(|a| {
@@ -1103,22 +1122,57 @@ fn squash<'a>(parts: impl IntoIterator<Item = &'a str>) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// Whitespace-separated words in `<body>`, ignoring script, style, noscript and template content.
-fn word_count(doc: &Html) -> u32 {
+/// Lowercased words of the page's main content: `<body>` text outside script, style, noscript,
+/// template, nav and footer (nav and footer repeat on every page and would make all pages look alike).
+fn content_words(doc: &Html) -> Vec<String> {
     let Some(body) = doc.select(&BODY).next() else {
-        return 0;
+        return Vec::new();
     };
     body.descendants()
         .filter_map(|n| Some((n, n.value().as_text()?)))
         .filter(|(n, _)| {
             !n.ancestors().any(|a| {
                 a.value().as_element().is_some_and(|e| {
-                    matches!(e.name(), "script" | "style" | "noscript" | "template")
+                    matches!(
+                        e.name(),
+                        "script" | "style" | "noscript" | "template" | "nav" | "footer"
+                    )
                 })
             })
         })
-        .map(|(_, t)| t.split_whitespace().count() as u32)
-        .sum()
+        .flat_map(|(_, t)| {
+            t.split_whitespace()
+                .map(str::to_lowercase)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// 64-bit FNV-1a: small, fast and stable across runs and Rust versions, which crawl files rely on.
+fn fnv64(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+        (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+/// SimHash over 3-word shingles: similar texts get fingerprints that differ in few bits.
+fn simhash(words: &[String]) -> u64 {
+    let shingles: Vec<String> = if words.len() < 3 {
+        vec![words.join(" ")]
+    } else {
+        words.windows(3).map(|w| w.join(" ")).collect()
+    };
+    let mut weights = [0i64; 64];
+    for h in shingles.iter().map(|s| fnv64(s.as_bytes())) {
+        for (bit, w) in weights.iter_mut().enumerate() {
+            *w += if h >> bit & 1 == 1 { 1 } else { -1 };
+        }
+    }
+    weights
+        .iter()
+        .enumerate()
+        .filter(|(_, w)| **w > 0)
+        .fold(0, |acc, (bit, _)| acc | 1 << bit)
 }
 
 #[cfg(test)]
@@ -1473,6 +1527,51 @@ mod tests {
     }
 
     #[test]
+    fn fingerprints_main_content_for_duplicates() {
+        let base = Url::parse("https://site.test/").unwrap();
+        let article: String = (0..300)
+            .map(|i| format!("parola{} ", i % 97 * 7 + i))
+            .collect();
+        let page = |body: &str, nav: &str| {
+            parse_html(
+                &base,
+                &format!(
+                    "<body><nav>{nav}</nav><main>{body}</main><footer>{nav} footer</footer></body>"
+                ),
+            )
+        };
+        let a = page(&article, "Home Servizi Contatti");
+        let same_text_other_menu = page(&article.to_uppercase(), "Menu completamente diverso qui");
+        let tweaked = page(
+            &article.replacen("parola0 ", "variante ", 1),
+            "Home Servizi Contatti",
+        );
+        let other: String = (0..300).map(|i| format!("altro{i} ")).collect();
+        let different = page(&other, "Home Servizi Contatti");
+
+        assert_eq!(a.word_count, 300, "nav and footer words are not counted");
+        assert_eq!(
+            a.content_hash, same_text_other_menu.content_hash,
+            "case and navigation don't matter"
+        );
+        assert_ne!(a.content_hash, tweaked.content_hash);
+        let bits = |x: &HtmlData, y: &HtmlData| {
+            let h = |d: &HtmlData| u64::from_str_radix(d.simhash.as_deref().unwrap(), 16).unwrap();
+            (h(x) ^ h(y)).count_ones()
+        };
+        assert!(
+            bits(&a, &tweaked) <= 6,
+            "one changed word stays near-duplicate: {}",
+            bits(&a, &tweaked)
+        );
+        assert!(
+            bits(&a, &different) > 16,
+            "unrelated text is far apart: {}",
+            bits(&a, &different)
+        );
+    }
+
+    #[test]
     fn empty_or_absent_metadata_is_missing() {
         let base = Url::parse("https://site.test/").unwrap();
         let data = parse_html(
@@ -1483,6 +1582,8 @@ mod tests {
             data,
             HtmlData {
                 word_count: 1,
+                content_hash: Some(format!("{:016x}", fnv64(b"hi"))),
+                simhash: Some(format!("{:016x}", simhash(&["hi".to_owned()]))),
                 ..HtmlData::default()
             }
         );

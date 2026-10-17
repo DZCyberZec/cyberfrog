@@ -48,7 +48,7 @@ docs/clean-room-map.md     funzionalità di riferimento
 
 ## Dove siamo (v0.5.0, 2026-10-17)
 
-App pubblicata: https://github.com/DZCyberZec/cyberfrog (Apache-2.0), ultima release [v0.5.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.5.0) con DMG per Apple silicon. Installata in `/Applications/CyberFrog.app`. 31 test Rust + `scripts/pages.check.ts`, clippy pulito.
+App pubblicata: https://github.com/DZCyberZec/cyberfrog (Apache-2.0), ultima release [v0.5.0](https://github.com/DZCyberZec/cyberfrog/releases/tag/v0.5.0) con DMG per Apple silicon. Installata in `/Applications/CyberFrog.app`. 29 test Rust + `scripts/pages.check.ts`, clippy pulito.
 
 ### Fatto
 

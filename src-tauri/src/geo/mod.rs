@@ -3,6 +3,7 @@
 //! into what the GEO report shows.
 
 pub mod bots;
+pub mod faq;
 pub mod llms;
 pub mod signals;
 

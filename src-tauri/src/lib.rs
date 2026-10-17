@@ -347,6 +347,44 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
     std::fs::write(path, contents).map_err(|e| e.to_string())
 }
 
+/// Largest page `faq_schema` reads; the rest is ignored.
+const FAQ_MAX_BYTES: usize = 2 * 1024 * 1024;
+
+/// FAQPage JSON-LD built from the question headings of one page, fetched fresh.
+#[tauri::command]
+async fn faq_schema(url: String) -> Result<String, String> {
+    let url = web_url(&url)?;
+    let fetch = |e: reqwest::Error| format!("Download della pagina non riuscito: {e}");
+    let mut resp = reqwest::Client::builder()
+        .user_agent(crawler::USER_AGENT)
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(fetch)?
+        .get(url)
+        .send()
+        .await
+        .map_err(fetch)?;
+    if !resp.status().is_success() {
+        return Err(format!(
+            "La pagina ha risposto con errore HTTP {}",
+            resp.status().as_u16()
+        ));
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(fetch)? {
+        body.extend_from_slice(&chunk);
+        if body.len() >= FAQ_MAX_BYTES {
+            body.truncate(FAQ_MAX_BYTES);
+            break;
+        }
+    }
+    let pairs = geo::faq::faq_from_html(&String::from_utf8_lossy(&body));
+    if pairs.is_empty() {
+        return Err("Nessun sottotitolo a domanda trovato nella pagina".into());
+    }
+    Ok(geo::faq::faq_jsonld(&pairs))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -372,7 +410,8 @@ pub fn run() {
             ai_status,
             ai_set_key,
             ai_complete,
-            write_text_file
+            write_text_file,
+            faq_schema
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

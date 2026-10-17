@@ -76,6 +76,9 @@ const ERROR_PREFIXES: [string, string][] = [
   ["Giorno o ora non validi", "Invalid day or time"],
   ["Claude ha rifiutato la richiesta.", "Claude declined the request."],
   ["Claude non ha restituito testo.", "Claude returned no text."],
+  ["Nessun sottotitolo a domanda trovato nella pagina", "No question headings found on the page"],
+  ["Download della pagina non riuscito", "Couldn't download the page"],
+  ["La pagina ha risposto con errore HTTP", "The page answered with HTTP error"],
 ];
 
 const EN: Record<string, string> = {
@@ -224,6 +227,14 @@ const EN: Record<string, string> = {
   "Risposta oltre 3 s": "Response over 3 s",
   "HTML oltre 512 KB": "HTML over 512 KB",
   "Crawl fermato al limite di {n} URL impostato: puoi alzarlo in Impostazioni.": "Crawl stopped at the {n}-URL limit you set: you can raise it in Settings.",
+  // generators
+  "Altre pagine": "Other pages",
+  "Genera llms.txt": "Generate llms.txt",
+  "llms.txt salvato in {path}": "llms.txt saved to {path}",
+  "Genera schema FAQ": "Generate FAQ schema",
+  "Leggo la pagina…": "Reading the page…",
+  "Schema FAQ per questa pagina": "FAQ schema for this page",
+  "Usa i sottotitoli a domanda della pagina e il testo che li segue. Incolla il blocco nell'HTML della pagina.": "Uses the page's question headings and the text that follows them. Paste the block into the page's HTML.",
   // list mode
   "Modalità": "Mode",
   "Sito": "Website",

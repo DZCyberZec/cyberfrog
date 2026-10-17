@@ -22,6 +22,7 @@ import { useAnalysis } from "./useAnalysis";
 import { TABS, type Tab } from "./nav";
 import { buildSitemapXml, type CrawlSnapshot } from "./pages";
 import { buildClientReport } from "./clientReport";
+import { buildLlmsTxt } from "./llms";
 import { LANG, LOCALE, setLang, tr, trError } from "./i18n";
 import "./App.css";
 
@@ -218,6 +219,8 @@ export default function App() {
       "Report salvato in {path}: aprilo nel browser e stampalo in PDF.",
     );
   };
+  const saveLlms = () =>
+    saveAs("llms.txt", [{ name: "llms.txt", extensions: ["txt"] }], (to) => invoke("write_text_file", { path: to, contents: buildLlmsTxt(crawl) }), "llms.txt salvato in {path}");
   const saveCrawlAs = () => saveAs(`${a.host}.sqlite`, SQLITE_FILTER, (to) => invoke("save_crawl_as", { from: crawl.path, to }), "Crawl salvato in {path}");
   const switchLang = () => setLang(LANG === "it" ? "en" : "it");
   const otherLang = LANG === "it" ? "English" : "Italiano";
@@ -367,6 +370,7 @@ export default function App() {
             settings={settings}
             aiReady={isAiReady(settings.ai_engine, aiStatus)}
             onSaveSitemap={saveSitemap}
+            onSaveLlms={saveLlms}
           />
         </div>
       )}

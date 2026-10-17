@@ -29,8 +29,8 @@ fn sel(css: &str) -> Selector {
     Selector::parse(css).expect("static selector")
 }
 
-static MAIN: LazyLock<Selector> = LazyLock::new(|| sel("main, article, [role=main]"));
-static BODY: LazyLock<Selector> = LazyLock::new(|| sel("body"));
+pub(crate) static MAIN: LazyLock<Selector> = LazyLock::new(|| sel("main, article, [role=main]"));
+pub(crate) static BODY: LazyLock<Selector> = LazyLock::new(|| sel("body"));
 static P: LazyLock<Selector> = LazyLock::new(|| sel("p"));
 static SUBHEADINGS: LazyLock<Selector> = LazyLock::new(|| sel("h2, h3"));
 static LISTS: LazyLock<Selector> = LazyLock::new(|| sel("ul, ol, dl"));
@@ -49,7 +49,7 @@ static APP_ROOT: LazyLock<Selector> =
 static BODY_SCRIPTS: LazyLock<Selector> = LazyLock::new(|| sel("body script[src]"));
 
 /// Elements around the content rather than in it.
-fn in_chrome(e: &ElementRef) -> bool {
+pub(crate) fn in_chrome(e: &ElementRef) -> bool {
     e.ancestors().any(|a| {
         a.value()
             .as_element()
@@ -57,7 +57,7 @@ fn in_chrome(e: &ElementRef) -> bool {
     })
 }
 
-fn text(e: &ElementRef) -> String {
+pub(crate) fn text(e: &ElementRef) -> String {
     e.text().collect::<Vec<_>>().join(" ")
 }
 
@@ -69,7 +69,7 @@ const QUESTION_WORDS: &[&str] = &[
     "should",
 ];
 
-fn is_question(heading: &str) -> bool {
+pub(crate) fn is_question(heading: &str) -> bool {
     let h = heading.trim().to_lowercase();
     h.ends_with('?')
         || h.split_whitespace()

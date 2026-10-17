@@ -534,3 +534,23 @@ dialog.settings button.add-rule { align-self: flex-start; text-align: left; }
 .faq-schema { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 .faq-schema .ai-actions { margin-bottom: 0; }
 .faq-pre { margin: 0; padding-top: 16px; max-height: 320px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Help */
+.workspace { position: relative; }
+.help { position: absolute; right: 16px; bottom: 16px; z-index: 20; }
+.help-btn {
+  display: grid; place-items: center; width: 32px; height: 32px; padding: 0; font-family: inherit; font-size: 15px; font-weight: 600; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 50%; box-shadow: var(--shadow); cursor: pointer;
+}
+.help-btn:hover, .help-btn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+.help-pop {
+  position: absolute; right: 0; bottom: calc(100% + 8px); width: min(380px, calc(100vw - 48px)); max-height: 70vh; overflow-y: auto;
+  padding: 14px 16px 6px; font-size: 13px; line-height: 1.5; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop);
+}
+.help-pop header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.help-pop h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.help-pop h3 { margin: 12px 0 2px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.help-pop p { margin: 0 0 4px; }
+.help-pop .close { width: 28px; height: 28px; color: var(--muted); background: none; border: 0; border-radius: var(--radius); cursor: pointer; }
+.help-pop .close:hover { color: var(--text); background: var(--sunken); }

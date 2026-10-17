@@ -16,6 +16,7 @@ const { TOPIC_FILTERS, topicFindings, REASON_LABEL } = await import("../src/topi
 const { summarize, metricRows, competitorActions } = await import("../src/competitor.ts");
 const { buildClientReport, esc } = await import("../src/clientReport.ts");
 const { buildLlmsTxt } = await import("../src/llms.ts");
+const { HELP } = await import("../src/help.ts");
 const { EMPTY_GEO, geoFilters, geoRows, botState, CITABILITY, PURPOSE_LABEL } = await import("../src/geo.ts");
 
 const base: Page = {
@@ -444,4 +445,15 @@ assert.equal(llms, [
   "## Altre pagine", "", "- [Acme | Tagline lunga](https://x.it/): Consulenza SEO e GEO.", "- [Contatti](https://x.it/contatti)", "- [Spazi](https://x.it/a%20b%281%29)", "",
 ].join("\n"), "hub first, noindex and errors left out, brackets and parentheses escaped");
 assert.ok(hasTranslation("Altre pagine"));
+// help: every report in the sidebar (ids read from nav.ts, which Node cannot import) and the tracker has a translated entry
+const { readFileSync } = await import("node:fs");
+const reportIds = [...readFileSync(new URL("../src/nav.ts", import.meta.url), "utf8").matchAll(/id: "([a-z_]+)"/g)].map((m) => m[1]);
+for (const id of [...reportIds, ...CHECKS.map((c) => c.field), "tracker"]) {
+  assert.ok(HELP[id], `help for ${id}`);
+}
+assert.ok(reportIds.length >= 20, "nav ids found");
+for (const [id, h] of Object.entries(HELP)) {
+  for (const text of [h.what, h.read, h.act]) assert.ok(hasTranslation(text), `English for help.${id}: ${text.slice(0, 40)}`);
+}
+for (const t of ["Come funziona", "Cosa mostra", "Come leggerlo", "Cosa fare", "Chiudi la guida"]) assert.ok(hasTranslation(t), t);
 console.log("pages.check: ok");

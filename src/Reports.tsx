@@ -8,6 +8,7 @@ import { TopicsReport } from "./TopicsReport";
 import { CompetitorReport } from "./CompetitorReport";
 import { SiteStructure } from "./SiteStructure";
 import { Overview } from "./Overview";
+import { HelpButton } from "./HelpButton";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
 import { planPrompt } from "./ai";
 import type { Settings } from "./settings";
@@ -148,6 +149,7 @@ export function Reports(p: Props) {
 
   return (
     <div className="workspace">
+      <HelpButton key={tab} tab={tab} />
       {tab === "overview" && <Overview crawl={crawl} a={a} go={p.go} />}
       {tab === "issues" && plan.state.status !== "idle" && (
         <section className="ai-plan" aria-label={tr("Piano d'azione AI")}>

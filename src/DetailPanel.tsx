@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DataTable, helperFor } from "./DataTable";
 import { codeLabel, kindOf, type LinkRow, type PageLinks } from "./pages";
+import { tr, trError } from "./i18n";
 
 const link = helperFor<LinkRow>();
 const columns = link.columns([
@@ -9,11 +10,11 @@ const columns = link.columns([
   link.accessor("anchor", { header: "Anchor text", size: 300 }),
   link.accessor((r) => codeLabel(r.status, null), {
     id: "status",
-    header: "Stato",
+    header: tr("Stato"),
     size: 130,
     cell: (c) => <span className={`badge ${kindOf(c.row.original.status)}`}>{c.getValue()}</span>,
   }),
-  link.accessor((r) => (r.external ? "Esterno" : "Interno"), { id: "kind", header: "Tipo", size: 90 }),
+  link.accessor((r) => (r.external ? tr("Esterno") : tr("Interno")), { id: "kind", header: tr("Tipo"), size: 90 }),
 ]);
 
 type Props = {
@@ -36,7 +37,7 @@ export function DetailPanel({ crawlPath, url, onClose, onNavigate }: Props) {
     setError(null);
     invoke<PageLinks>("page_links", { path: crawlPath, url }).then(
       (l) => current && setLinks(l),
-      (e) => current && setError(String(e)),
+      (e) => current && setError(trError(String(e))),
     );
     return () => {
       current = false;
@@ -46,27 +47,27 @@ export function DetailPanel({ crawlPath, url, onClose, onNavigate }: Props) {
   const slug = new URL(url).pathname.replace(/\W+/g, "-").replace(/^-|-$/g, "") || "home";
 
   return (
-    <section className="detail" aria-label={`Dettaglio di ${url}`}>
+    <section className="detail" aria-label={tr("Dettaglio di {url}", { url })}>
       <header className="detail-head">
-        <nav className="tabs" role="tablist" aria-label="Link della pagina">
+        <nav className="tabs" role="tablist" aria-label={tr("Link della pagina")}>
           <button type="button" role="tab" aria-selected={view === "inlinks"} onClick={() => setView("inlinks")}>
-            Inlink {links && <span className="count">{links.inlinks.length}</span>}
+            {tr("Inlink")} {links && <span className="count">{links.inlinks.length}</span>}
           </button>
           <button type="button" role="tab" aria-selected={view === "outlinks"} onClick={() => setView("outlinks")}>
-            Outlink {links && <span className="count">{links.outlinks.length}</span>}
+            {tr("Outlink")} {links && <span className="count">{links.outlinks.length}</span>}
           </button>
         </nav>
         <span className="detail-url" title={url}>
           {url}
         </span>
-        <button type="button" className="close" onClick={onClose} aria-label="Chiudi dettaglio">
+        <button type="button" className="close" onClick={onClose} aria-label={tr("Chiudi dettaglio")}>
           ✕
         </button>
       </header>
       {error ? (
         <p className="empty">{error}</p>
       ) : !links ? (
-        <p className="empty">Carico i link…</p>
+        <p className="empty">{tr("Carico i link…")}</p>
       ) : (
         <DataTable
           key={`${url}-${view}`}

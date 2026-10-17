@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { DEFAULT_SETTINGS, USER_AGENTS, type Settings } from "./settings";
+import { tr } from "./i18n";
 
 type Props = {
   open: boolean;
@@ -37,12 +38,12 @@ export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
   return (
     <dialog ref={ref} className="settings" onClose={onClose} aria-labelledby="settings-title">
       <form onSubmit={submit}>
-        <h2 id="settings-title">Impostazioni crawl</h2>
+        <h2 id="settings-title">{tr("Impostazioni crawl")}</h2>
 
         <fieldset>
-          <legend>Limiti</legend>
+          <legend>{tr("Limiti")}</legend>
           <label>
-            Numero massimo di URL
+            {tr("Numero massimo di URL")}
             <input
               type="number"
               min={1}
@@ -53,7 +54,7 @@ export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
             />
           </label>
           <label>
-            Richieste in parallelo
+            {tr("Richieste in parallelo")}
             <input
               type="number"
               min={1}
@@ -62,14 +63,14 @@ export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
               value={draft.concurrency}
               onChange={(e) => set("concurrency", e.currentTarget.valueAsNumber || 1)}
             />
-            <small>Più alto è più veloce ma pesa di più sul server. 8 va bene per quasi tutti i siti.</small>
+            <small>{tr("Più alto è più veloce ma pesa di più sul server. 8 va bene per quasi tutti i siti.")}</small>
           </label>
         </fieldset>
 
         <fieldset>
-          <legend>User agent</legend>
+          <legend>{tr("User agent")}</legend>
           <label>
-            Identità del crawler
+            {tr("Identità del crawler")}
             <select
               value={preset}
               onChange={(e) => {
@@ -82,34 +83,34 @@ export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
                   {u.label}
                 </option>
               ))}
-              <option value={CUSTOM}>Personalizzato…</option>
+              <option value={CUSTOM}>{tr("Personalizzato…")}</option>
             </select>
           </label>
           {preset === CUSTOM && (
             <label>
-              User agent personalizzato
+              {tr("User agent personalizzato")}
               <input
                 type="text"
                 value={draft.user_agent}
                 onChange={(e) => set("user_agent", e.currentTarget.value)}
-                placeholder="MioCrawler/1.0"
+                placeholder={tr("MioCrawler/1.0")}
               />
             </label>
           )}
         </fieldset>
 
         <fieldset>
-          <legend>Cosa analizzare</legend>
-          <Check label="Rispetta robots.txt" checked={draft.respect_robots} onChange={(v) => set("respect_robots", v)} />
-          <Check label="Verifica i link esterni" checked={draft.check_external} onChange={(v) => set("check_external", v)} />
-          <Check label="Verifica peso e stato delle immagini" checked={draft.check_images} onChange={(v) => set("check_images", v)} />
-          <Check label="Leggi le sitemap XML" checked={draft.use_sitemaps} onChange={(v) => set("use_sitemaps", v)} />
+          <legend>{tr("Cosa analizzare")}</legend>
+          <Check label={tr("Rispetta robots.txt")} checked={draft.respect_robots} onChange={(v) => set("respect_robots", v)} />
+          <Check label={tr("Verifica i link esterni")} checked={draft.check_external} onChange={(v) => set("check_external", v)} />
+          <Check label={tr("Verifica peso e stato delle immagini")} checked={draft.check_images} onChange={(v) => set("check_images", v)} />
+          <Check label={tr("Leggi le sitemap XML")} checked={draft.use_sitemaps} onChange={(v) => set("use_sitemaps", v)} />
         </fieldset>
 
         <fieldset>
-          <legend>Escludi URL</legend>
+          <legend>{tr("Escludi URL")}</legend>
           <label>
-            Un'espressione regolare per riga
+            {tr("Un'espressione regolare per riga")}
             <textarea
               rows={4}
               value={draft.exclude.join("\n")}
@@ -122,14 +123,14 @@ export function SettingsDialog({ open, settings, onSave, onClose }: Props) {
 
         <footer>
           <button type="button" className="link" onClick={() => setDraft(DEFAULT_SETTINGS)}>
-            Ripristina predefinite
+            {tr("Ripristina predefinite")}
           </button>
           <span className="spacer" />
           <button type="button" className="secondary" onClick={onClose}>
-            Annulla
+            {tr("Annulla")}
           </button>
           <button type="submit" className="primary">
-            Salva
+            {tr("Salva")}
           </button>
         </footer>
       </form>

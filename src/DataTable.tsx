@@ -15,6 +15,7 @@ import {
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toCsv, type FilterDef } from "./pages";
+import { tr } from "./i18n";
 
 const ROW_HEIGHT = 30;
 
@@ -85,9 +86,9 @@ export function DataTable<T extends RowData>({
     const body = rows.map((r) => r.getAllCells().map((c) => c.getValue()));
     try {
       await invoke("write_text_file", { path, contents: toCsv(header, body) });
-      setExportMsg(rows.length === 1 ? "Esportata 1 riga" : `Esportate ${rows.length} righe`);
+      setExportMsg(rows.length === 1 ? tr("Esportata 1 riga") : tr("Esportate {n} righe", { n: rows.length }));
     } catch (err) {
-      setExportMsg(`Esportazione non riuscita: ${err}`);
+      setExportMsg(tr("Esportazione non riuscita: {err}", { err: String(err) }));
     }
   }
 
@@ -107,7 +108,7 @@ export function DataTable<T extends RowData>({
         )}
         {actions}
         <button type="button" className="secondary" onClick={exportCsv} disabled={rows.length === 0}>
-          Esporta CSV
+          {tr("Esporta CSV")}
         </button>
       </div>
 
@@ -157,7 +158,7 @@ export function DataTable<T extends RowData>({
             {padBottom > 0 && <tr style={{ height: padBottom }} />}
           </tbody>
         </table>
-        {rows.length === 0 && <p className="empty">Nessun URL in questa vista.</p>}
+        {rows.length === 0 && <p className="empty">{tr("Nessun URL in questa vista.")}</p>}
       </div>
     </div>
   );

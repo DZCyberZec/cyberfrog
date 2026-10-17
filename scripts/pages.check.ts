@@ -1,8 +1,13 @@
 // Self-check for filters and CSV export. Run: node scripts/pages.check.ts
 import assert from "node:assert/strict";
-import {
-  BROKEN_FILTERS, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
-} from "../src/pages.ts";
+import type { Page } from "../src/pages.ts";
+
+// expected labels below are Italian, the source language; pin it before the modules load
+Object.defineProperty(globalThis, "navigator", { value: { language: "it-IT" }, configurable: true });
+const {
+  BROKEN_FILTERS, ISSUES, countIssues, DUP_FILTERS, dupPages, schemaFilters, schemaPages, HREFLANG_FILTERS, hreflangIssues, hreflangPages, validHreflang, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv,
+} = await import("../src/pages.ts");
+const { hasTranslation } = await import("../src/i18n.ts");
 
 const base: Page = {
   url: "", depth: 0, status: 200, content_type: "text/html", redirect_to: null, blocked_by_robots: false,
@@ -211,4 +216,11 @@ const tabsWithFilters: Record<string, string[]> = {
   duplicates: DUP_FILTERS.map((f) => f.id),
 };
 for (const d of ISSUES) assert.ok(tabsWithFilters[d.tab]?.includes(d.filter), `issue ${d.label} points to a real filter`);
+const labels = [
+  ...ISSUES.flatMap((d) => [d.label, d.fix, d.priority]),
+  ...[CODE_FILTERS, BROKEN_FILTERS, IMAGE_FILTERS, SITEMAP_FILTERS, PERF_FILTERS, HREFLANG_FILTERS, DUP_FILTERS,
+      indexFilters([]), schemaFilters([]), ...CHECKS.map(metaFilters)].flat().map((f) => f.label),
+];
+const untranslated = [...new Set(labels)].filter((l) => !hasTranslation(l) && !/^(\d|Tutt|Oltre|Sotto|Contenuto scarso \()/.test(l));
+assert.deepEqual(untranslated, [], "every issue and filter label has an English translation");
 console.log("pages.check: ok");

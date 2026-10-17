@@ -1,3 +1,5 @@
+import { LOCALE, tr } from "./i18n.ts";
+
 /** Mirrors `crawler::Page` in src-tauri/src/crawler.rs. */
 export type Page = {
   url: string;
@@ -92,12 +94,12 @@ export function kindOf(status: number | null): StatusKind {
 /** Label for a bare status: the code, or why there is none. */
 export function codeLabel(status: number | null, error: string | null): string {
   if (status !== null) return String(status);
-  return error ? `Nessuna risposta: ${error}` : "Nessuna risposta";
+  return error ? tr("Nessuna risposta: {e}", { e: error }) : tr("Nessuna risposta");
 }
 
 export function statusLabel(p: Page): string {
-  if (p.blocked_by_robots) return "Bloccato da robots.txt";
-  if (p.status === null) return p.error ? `Nessuna risposta: ${p.error}` : "Nessuna risposta";
+  if (p.blocked_by_robots) return tr("Bloccato da robots.txt");
+  if (p.status === null) return p.error ? tr("Nessuna risposta: {e}", { e: p.error }) : tr("Nessuna risposta");
   return String(p.status);
 }
 
@@ -105,42 +107,42 @@ export function statusLabel(p: Page): string {
 export function statusFilters<T extends { status: number | null }>(): FilterDef<T>[] {
   const is = (k: StatusKind) => (r: T) => kindOf(r.status) === k;
   return [
-    { id: "all", label: "Tutti", test: () => true },
-    { id: "ok", label: "2xx Successo", test: is("ok") },
-    { id: "redirect", label: "3xx Redirect", test: is("redirect") },
-    { id: "client", label: "4xx Errore client", test: is("client") },
-    { id: "server", label: "5xx Errore server", test: is("server") },
-    { id: "none", label: "Nessuna risposta", test: is("none") },
+    { id: "all", label: tr("Tutti"), test: () => true },
+    { id: "ok", label: tr("2xx Successo"), test: is("ok") },
+    { id: "redirect", label: tr("3xx Redirect"), test: is("redirect") },
+    { id: "client", label: tr("4xx Errore client"), test: is("client") },
+    { id: "server", label: tr("5xx Errore server"), test: is("server") },
+    { id: "none", label: tr("Nessuna risposta"), test: is("none") },
   ];
 }
 
 export const BROKEN_FILTERS: FilterDef<BrokenLink>[] = [
-  { id: "all", label: "Tutti", test: () => true },
-  { id: "internal", label: "Interni", test: (b) => !b.external },
-  { id: "external", label: "Esterni", test: (b) => b.external },
+  { id: "all", label: tr("Tutti"), test: () => true },
+  { id: "internal", label: tr("Interni"), test: (b) => !b.external },
+  { id: "external", label: tr("Esterni"), test: (b) => b.external },
   ...statusFilters<BrokenLink>().filter((f) => ["client", "server", "none"].includes(f.id)),
 ];
 
 export const CODE_FILTERS: FilterDef<Page>[] = [
-  { id: "all", label: "Tutti", test: () => true },
-  { id: "ok", label: "2xx Successo", test: (p) => statusKind(p) === "ok" },
-  { id: "redirect", label: "3xx Redirect", test: (p) => statusKind(p) === "redirect" },
-  { id: "client", label: "4xx Errore client", test: (p) => statusKind(p) === "client" },
-  { id: "server", label: "5xx Errore server", test: (p) => statusKind(p) === "server" },
-  { id: "blocked", label: "Bloccati da robots.txt", test: (p) => statusKind(p) === "blocked" },
-  { id: "none", label: "Nessuna risposta", test: (p) => statusKind(p) === "none" },
+  { id: "all", label: tr("Tutti"), test: () => true },
+  { id: "ok", label: tr("2xx Successo"), test: (p) => statusKind(p) === "ok" },
+  { id: "redirect", label: tr("3xx Redirect"), test: (p) => statusKind(p) === "redirect" },
+  { id: "client", label: tr("4xx Errore client"), test: (p) => statusKind(p) === "client" },
+  { id: "server", label: tr("5xx Errore server"), test: (p) => statusKind(p) === "server" },
+  { id: "blocked", label: tr("Bloccati da robots.txt"), test: (p) => statusKind(p) === "blocked" },
+  { id: "none", label: tr("Nessuna risposta"), test: (p) => statusKind(p) === "none" },
 ];
 
 export function metaFilters(check: Check): FilterDef<MetaRow>[] {
   const { max, min } = check;
   return [
-    { id: "all", label: "Tutti", test: () => true },
-    { id: "missing", label: "Mancante", test: (r) => r.value === null },
-    { id: "duplicate", label: "Duplicato", test: (r) => r.occurrences > 1 },
-    { id: "long", label: `Oltre ${max} caratteri`, test: (r) => r.length > max },
+    { id: "all", label: tr("Tutti"), test: () => true },
+    { id: "missing", label: tr("Mancante"), test: (r) => r.value === null },
+    { id: "duplicate", label: tr("Duplicato"), test: (r) => r.occurrences > 1 },
+    { id: "long", label: tr("Oltre {n} caratteri", { n: max }), test: (r) => r.length > max },
     ...(min === undefined
       ? []
-      : [{ id: "short", label: `Sotto ${min} caratteri`, test: (r: MetaRow) => r.value !== null && r.length < min }]),
+      : [{ id: "short", label: tr("Sotto {n} caratteri", { n: min }), test: (r: MetaRow) => r.value !== null && r.length < min }]),
   ];
 }
 
@@ -198,18 +200,18 @@ export function isCanonicalised(p: Page): boolean {
 export function nonIndexableReason(p: Page): string | null {
   switch (statusKind(p)) {
     case "blocked":
-      return "Bloccato da robots.txt";
+      return tr("Bloccato da robots.txt");
     case "none":
-      return "Nessuna risposta";
+      return tr("Nessuna risposta");
     case "redirect":
       return "Redirect";
     case "client":
-      return "Errore client (4xx)";
+      return tr("Errore client (4xx)");
     case "server":
-      return "Errore server (5xx)";
+      return tr("Errore server (5xx)");
   }
   if (directives(p).noindex) return "Noindex";
-  if (isCanonicalised(p)) return "Canonicalizzata";
+  if (isCanonicalised(p)) return tr("Canonicalizzata");
   return null;
 }
 
@@ -218,28 +220,28 @@ export function indexFilters(pages: Page[]): FilterDef<Page>[] {
   const byUrl = new Map(pages.map((p) => [p.url, p]));
   const html = (p: Page) => isHtmlPage(p);
   return [
-    { id: "all", label: "Tutti", test: () => true },
-    { id: "indexable", label: "Indicizzabili", test: (p) => nonIndexableReason(p) === null },
-    { id: "non-indexable", label: "Non indicizzabili", test: (p) => nonIndexableReason(p) !== null },
+    { id: "all", label: tr("Tutti"), test: () => true },
+    { id: "indexable", label: tr("Indicizzabili"), test: (p) => nonIndexableReason(p) === null },
+    { id: "non-indexable", label: tr("Non indicizzabili"), test: (p) => nonIndexableReason(p) !== null },
     { id: "noindex", label: "Noindex", test: (p) => directives(p).noindex },
     { id: "nofollow", label: "Nofollow", test: (p) => directives(p).nofollow },
-    { id: "canonicalised", label: "Canonicalizzate", test: (p) => isCanonicalised(p) },
-    { id: "self", label: "Canonical auto-referenziale", test: (p) => p.canonical === p.url },
+    { id: "canonicalised", label: tr("Canonicalizzate"), test: (p) => isCanonicalised(p) },
+    { id: "self", label: tr("Canonical auto-referenziale"), test: (p) => p.canonical === p.url },
     {
       id: "no-canonical",
-      label: "Canonical mancante",
+      label: tr("Canonical mancante"),
       test: (p) => html(p) && p.canonical === null && nonIndexableReason(p) === null,
     },
     {
       id: "bad-canonical",
-      label: "Canonical verso URL non 200",
+      label: tr("Canonical verso URL non 200"),
       test: (p) => {
         if (!isCanonicalised(p)) return false;
         const target = byUrl.get(p.canonical!);
         return target !== undefined && target.status !== 200; // uncrawled targets (other hosts) are not judged
       },
     },
-    { id: "x-robots", label: "X-Robots-Tag presente", test: (p) => p.x_robots_tag !== null },
+    { id: "x-robots", label: tr("X-Robots-Tag presente"), test: (p) => p.x_robots_tag !== null },
   ];
 }
 
@@ -247,15 +249,15 @@ export function indexFilters(pages: Page[]): FilterDef<Page>[] {
 export const LARGE_IMAGE_BYTES = 100 * 1024;
 
 export const IMAGE_FILTERS: FilterDef<ImageRow>[] = [
-  { id: "all", label: "Tutte", test: () => true },
-  { id: "large", label: "Oltre 100 KB", test: (i) => (i.bytes ?? 0) > LARGE_IMAGE_BYTES },
-  { id: "missing-alt", label: "Alt mancante", test: (i) => i.missing_alt > 0 },
-  { id: "empty-alt", label: "Alt vuoto (decorative)", test: (i) => i.empty_alt > 0 },
-  { id: "no-size", label: "Senza width/height", test: (i) => i.missing_size > 0 },
-  { id: "errors", label: "Errori", test: (i) => i.status === null || i.status >= 400 },
+  { id: "all", label: tr("Tutte"), test: () => true },
+  { id: "large", label: tr("Oltre 100 KB"), test: (i) => (i.bytes ?? 0) > LARGE_IMAGE_BYTES },
+  { id: "missing-alt", label: tr("Alt mancante"), test: (i) => i.missing_alt > 0 },
+  { id: "empty-alt", label: tr("Alt vuoto (decorative)"), test: (i) => i.empty_alt > 0 },
+  { id: "no-size", label: tr("Senza width/height"), test: (i) => i.missing_size > 0 },
+  { id: "errors", label: tr("Errori"), test: (i) => i.status === null || i.status >= 400 },
 ];
 
-const kb = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
+const kb = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
 
 /** "850 B", "12,3 KB", "1,4 MB". */
 export function formatBytes(n: number | null): string {
@@ -266,17 +268,17 @@ export function formatBytes(n: number | null): string {
 }
 
 export const SITEMAP_FILTERS: FilterDef<Page>[] = [
-  { id: "all", label: "Tutti", test: () => true },
-  { id: "listed", label: "Nella sitemap", test: (p) => p.in_sitemap },
+  { id: "all", label: tr("Tutti"), test: () => true },
+  { id: "listed", label: tr("Nella sitemap"), test: (p) => p.in_sitemap },
   {
     id: "missing",
-    label: "Indicizzabili non nella sitemap",
+    label: tr("Indicizzabili non nella sitemap"),
     test: (p) => !p.in_sitemap && isHtmlPage(p) && nonIndexableReason(p) === null,
   },
-  { id: "orphan", label: "Orfane (nessun inlink)", test: (p) => p.in_sitemap && p.inlinks === 0 && p.depth !== 0 },
+  { id: "orphan", label: tr("Orfane (nessun inlink)"), test: (p) => p.in_sitemap && p.inlinks === 0 && p.depth !== 0 },
   {
     id: "non-indexable",
-    label: "Non indicizzabili nella sitemap",
+    label: tr("Non indicizzabili nella sitemap"),
     test: (p) => p.in_sitemap && nonIndexableReason(p) !== null,
   },
 ];
@@ -305,10 +307,10 @@ export const VERY_SLOW_MS = 3000;
 export const HEAVY_PAGE_BYTES = 512 * 1024;
 
 export const PERF_FILTERS: FilterDef<Page>[] = [
-  { id: "all", label: "Tutti", test: () => true },
-  { id: "slow", label: "Risposta oltre 1 s", test: (p) => (p.response_ms ?? 0) > SLOW_MS },
-  { id: "very-slow", label: "Risposta oltre 3 s", test: (p) => (p.response_ms ?? 0) > VERY_SLOW_MS },
-  { id: "heavy", label: "HTML oltre 512 KB", test: (p) => isHtmlPage(p) && (p.size_bytes ?? 0) > HEAVY_PAGE_BYTES },
+  { id: "all", label: tr("Tutti"), test: () => true },
+  { id: "slow", label: tr("Risposta oltre 1 s"), test: (p) => (p.response_ms ?? 0) > SLOW_MS },
+  { id: "very-slow", label: tr("Risposta oltre 3 s"), test: (p) => (p.response_ms ?? 0) > VERY_SLOW_MS },
+  { id: "heavy", label: tr("HTML oltre 512 KB"), test: (p) => isHtmlPage(p) && (p.size_bytes ?? 0) > HEAVY_PAGE_BYTES },
 ];
 
 /** Median response time of pages that answered, or null when none did. */
@@ -365,23 +367,23 @@ export function hreflangPages(pages: Page[], rows: HreflangRow[]): HreflangPage[
 
 export function hreflangIssues(h: HreflangPage): string {
   return [
-    h.invalid.length > 0 && `Codice non valido: ${h.invalid.join(", ")}`,
-    h.noReturn.length > 0 && `Manca il return link da ${h.noReturn.length}`,
-    h.badTarget.length > 0 && `${h.badTarget.length} alternative non 200`,
-    !h.selfRef && "Manca l'auto-riferimento",
-    !h.xDefault && "Manca x-default",
+    h.invalid.length > 0 && tr("Codice non valido: {codes}", { codes: h.invalid.join(", ") }),
+    h.noReturn.length > 0 && tr("Manca il return link da {n}", { n: h.noReturn.length }),
+    h.badTarget.length > 0 && tr("{n} alternative non 200", { n: h.badTarget.length }),
+    !h.selfRef && tr("Manca l'auto-riferimento"),
+    !h.xDefault && tr("Manca x-default"),
   ]
     .filter(Boolean)
     .join(" · ");
 }
 
 export const HREFLANG_FILTERS: FilterDef<HreflangPage>[] = [
-  { id: "all", label: "Tutte", test: () => true },
-  { id: "invalid", label: "Codice non valido", test: (h) => h.invalid.length > 0 },
-  { id: "no-return", label: "Senza return link", test: (h) => h.noReturn.length > 0 },
-  { id: "bad-target", label: "Alternative non 200", test: (h) => h.badTarget.length > 0 },
-  { id: "no-self", label: "Senza auto-riferimento", test: (h) => !h.selfRef },
-  { id: "no-x-default", label: "Senza x-default", test: (h) => !h.xDefault },
+  { id: "all", label: tr("Tutte"), test: () => true },
+  { id: "invalid", label: tr("Codice non valido"), test: (h) => h.invalid.length > 0 },
+  { id: "no-return", label: tr("Senza return link"), test: (h) => h.noReturn.length > 0 },
+  { id: "bad-target", label: tr("Alternative non 200"), test: (h) => h.badTarget.length > 0 },
+  { id: "no-self", label: tr("Senza auto-riferimento"), test: (h) => !h.selfRef },
+  { id: "no-x-default", label: tr("Senza x-default"), test: (h) => !h.xDefault },
 ];
 
 /** Mirrors `report::StructuredRow`: a schema.org type on a page, or a block that failed to parse. */
@@ -423,11 +425,11 @@ export function schemaFilters(rows: SchemaPage[]): FilterDef<SchemaPage>[] {
   for (const r of rows) for (const t of r.types) freq.set(t, (freq.get(t) ?? 0) + 1);
   const top = [...freq].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 8);
   return [
-    { id: "all", label: "Tutte", test: () => true },
-    { id: "with", label: "Con dati strutturati", test: (r) => r.types.length > 0 },
-    { id: "without", label: "Senza dati strutturati", test: (r) => r.types.length === 0 && r.errors === 0 },
-    { id: "errors", label: "JSON non valido", test: (r) => r.errors > 0 },
-    { id: "warnings", label: "Proprietà mancanti", test: (r) => r.warnings > 0 },
+    { id: "all", label: tr("Tutte"), test: () => true },
+    { id: "with", label: tr("Con dati strutturati"), test: (r) => r.types.length > 0 },
+    { id: "without", label: tr("Senza dati strutturati"), test: (r) => r.types.length === 0 && r.errors === 0 },
+    { id: "errors", label: tr("JSON non valido"), test: (r) => r.errors > 0 },
+    { id: "warnings", label: tr("Proprietà mancanti"), test: (r) => r.warnings > 0 },
     ...top.map(([t]) => ({ id: `type:${t}`, label: t, test: (r: SchemaPage) => r.types.includes(t) })),
   ];
 }
@@ -488,10 +490,10 @@ export function dupPages(pages: Page[]): DupPage[] {
 }
 
 export const DUP_FILTERS: FilterDef<DupPage>[] = [
-  { id: "all", label: "Tutte", test: () => true },
-  { id: "exact", label: "Duplicati esatti", test: (d) => d.exact > 0 },
-  { id: "near", label: "Quasi duplicati (≥ 90%)", test: (d) => d.near > 0 },
-  { id: "low", label: `Contenuto scarso (< ${LOW_CONTENT_WORDS} parole)`, test: (d) => (d.word_count ?? 0) < LOW_CONTENT_WORDS },
+  { id: "all", label: tr("Tutte"), test: () => true },
+  { id: "exact", label: tr("Duplicati esatti"), test: (d) => d.exact > 0 },
+  { id: "near", label: tr("Quasi duplicati (≥ 90%)"), test: (d) => d.near > 0 },
+  { id: "low", label: tr("Contenuto scarso (< {n} parole)", { n: LOW_CONTENT_WORDS }), test: (d) => (d.word_count ?? 0) < LOW_CONTENT_WORDS },
 ];
 
 export type Priority = "Alta" | "Media" | "Bassa";
@@ -500,39 +502,39 @@ export type Priority = "Alta" | "Media" | "Bassa";
 export type IssueDef = { tab: string; filter: string; label: string; priority: Priority; fix: string };
 
 export const ISSUES: IssueDef[] = [
-  { tab: "codes", filter: "client", priority: "Alta", label: "Pagine con errore 4xx", fix: "Ripristina la pagina o reindirizzala (301) e aggiorna i link che la puntano." },
-  { tab: "codes", filter: "server", priority: "Alta", label: "Pagine con errore 5xx", fix: "Errore del server: controlla hosting, plugin e log." },
-  { tab: "broken", filter: "internal", priority: "Alta", label: "Link interni rotti", fix: "Correggi o rimuovi i link verso pagine che non esistono." },
-  { tab: "title", filter: "missing", priority: "Alta", label: "Title mancante", fix: "Scrivi un title unico che descriva la pagina." },
-  { tab: "index", filter: "bad-canonical", priority: "Alta", label: "Canonical verso URL non 200", fix: "Punta il canonical a una pagina che risponde 200." },
-  { tab: "schema", filter: "errors", priority: "Alta", label: "Dati strutturati con JSON non valido", fix: "Correggi la sintassi del JSON-LD: Google lo ignora interamente." },
-  { tab: "hreflang", filter: "invalid", priority: "Alta", label: "Codici hreflang non validi", fix: "Usa codici lingua-regione ISO, es. it-IT, en-GB." },
-  { tab: "hreflang", filter: "no-return", priority: "Alta", label: "Hreflang senza return link", fix: "Ogni pagina alternativa deve puntare di ritorno a questa." },
-  { tab: "title", filter: "duplicate", priority: "Media", label: "Title duplicati", fix: "Rendi ogni title unico per la sua pagina." },
-  { tab: "meta_description", filter: "missing", priority: "Media", label: "Meta description mancante", fix: "Aggiungi una descrizione che inviti al clic." },
-  { tab: "meta_description", filter: "duplicate", priority: "Media", label: "Meta description duplicate", fix: "Scrivi descrizioni diverse per pagine diverse." },
-  { tab: "h1", filter: "missing", priority: "Media", label: "H1 mancante", fix: "Aggiungi un H1 con l'argomento principale della pagina." },
-  { tab: "broken", filter: "external", priority: "Media", label: "Link esterni rotti", fix: "Aggiorna o rimuovi i link verso siti che non rispondono più." },
-  { tab: "images", filter: "large", priority: "Media", label: "Immagini oltre 100 KB", fix: "Comprimi o converti in WebP/AVIF per velocizzare le pagine." },
-  { tab: "images", filter: "missing-alt", priority: "Media", label: "Immagini senza alt", fix: "Aggiungi un testo alternativo descrittivo (o alt=\"\" se decorativa)." },
-  { tab: "perf", filter: "slow", priority: "Media", label: "Pagine con risposta oltre 1 s", fix: "Attiva cache e verifica hosting e query lente." },
-  { tab: "sitemap", filter: "orphan", priority: "Media", label: "Pagine orfane", fix: "Linka queste pagine da altre pagine del sito." },
-  { tab: "sitemap", filter: "non-indexable", priority: "Media", label: "URL non indicizzabili nella sitemap", fix: "La sitemap deve contenere solo pagine indicizzabili con risposta 200." },
-  { tab: "schema", filter: "warnings", priority: "Media", label: "Dati strutturati con proprietà mancanti", fix: "Aggiungi le proprietà richieste per ottenere i risultati avanzati." },
-  { tab: "duplicates", filter: "exact", priority: "Media", label: "Contenuti duplicati", fix: "Unisci le pagine o indica la principale con un canonical." },
-  { tab: "codes", filter: "redirect", priority: "Bassa", label: "Redirect (3xx)", fix: "Aggiorna i link interni perché puntino direttamente alla destinazione." },
-  { tab: "title", filter: "long", priority: "Bassa", label: "Title oltre 60 caratteri", fix: "Accorcia: in Google verrà troncato." },
-  { tab: "title", filter: "short", priority: "Bassa", label: "Title sotto 30 caratteri", fix: "Sfrutta meglio lo spazio con parole chiave utili." },
-  { tab: "meta_description", filter: "long", priority: "Bassa", label: "Meta description oltre 155 caratteri", fix: "Accorcia: in Google verrà troncata." },
-  { tab: "meta_description", filter: "short", priority: "Bassa", label: "Meta description sotto 70 caratteri", fix: "Aggiungi dettagli e un invito all'azione." },
-  { tab: "h1", filter: "long", priority: "Bassa", label: "H1 oltre 70 caratteri", fix: "Rendi l'H1 più conciso." },
-  { tab: "duplicates", filter: "near", priority: "Bassa", label: "Contenuti quasi duplicati", fix: "Differenzia i testi o unisci le pagine simili." },
-  { tab: "duplicates", filter: "low", priority: "Bassa", label: "Contenuto scarso", fix: "Arricchisci il testo o valuta un noindex." },
-  { tab: "images", filter: "no-size", priority: "Bassa", label: "Immagini senza width/height", fix: "Indica le dimensioni per evitare spostamenti del layout (CLS)." },
-  { tab: "index", filter: "no-canonical", priority: "Bassa", label: "Canonical mancante", fix: "Aggiungi un canonical auto-referenziale." },
-  { tab: "sitemap", filter: "missing", priority: "Bassa", label: "Pagine indicizzabili non nella sitemap", fix: "Aggiungile alla sitemap se vuoi che Google le trovi." },
-  { tab: "hreflang", filter: "no-x-default", priority: "Bassa", label: "Hreflang senza x-default", fix: "Indica la versione predefinita con hreflang=\"x-default\"." },
-  { tab: "codes", filter: "blocked", priority: "Bassa", label: "URL bloccati da robots.txt", fix: "Verifica che il blocco sia voluto." },
+  { tab: "codes", filter: "client", priority: "Alta", label: tr("Pagine con errore 4xx"), fix: tr("Ripristina la pagina o reindirizzala (301) e aggiorna i link che la puntano.") },
+  { tab: "codes", filter: "server", priority: "Alta", label: tr("Pagine con errore 5xx"), fix: tr("Errore del server: controlla hosting, plugin e log.") },
+  { tab: "broken", filter: "internal", priority: "Alta", label: tr("Link interni rotti"), fix: tr("Correggi o rimuovi i link verso pagine che non esistono.") },
+  { tab: "title", filter: "missing", priority: "Alta", label: tr("Title mancante"), fix: tr("Scrivi un title unico che descriva la pagina.") },
+  { tab: "index", filter: "bad-canonical", priority: "Alta", label: tr("Canonical verso URL non 200"), fix: tr("Punta il canonical a una pagina che risponde 200.") },
+  { tab: "schema", filter: "errors", priority: "Alta", label: tr("Dati strutturati con JSON non valido"), fix: tr("Correggi la sintassi del JSON-LD: Google lo ignora interamente.") },
+  { tab: "hreflang", filter: "invalid", priority: "Alta", label: tr("Codici hreflang non validi"), fix: tr("Usa codici lingua-regione ISO, es. it-IT, en-GB.") },
+  { tab: "hreflang", filter: "no-return", priority: "Alta", label: tr("Hreflang senza return link"), fix: tr("Ogni pagina alternativa deve puntare di ritorno a questa.") },
+  { tab: "title", filter: "duplicate", priority: "Media", label: tr("Title duplicati"), fix: tr("Rendi ogni title unico per la sua pagina.") },
+  { tab: "meta_description", filter: "missing", priority: "Media", label: tr("Meta description mancante"), fix: tr("Aggiungi una descrizione che inviti al clic.") },
+  { tab: "meta_description", filter: "duplicate", priority: "Media", label: tr("Meta description duplicate"), fix: tr("Scrivi descrizioni diverse per pagine diverse.") },
+  { tab: "h1", filter: "missing", priority: "Media", label: tr("H1 mancante"), fix: tr("Aggiungi un H1 con l'argomento principale della pagina.") },
+  { tab: "broken", filter: "external", priority: "Media", label: tr("Link esterni rotti"), fix: tr("Aggiorna o rimuovi i link verso siti che non rispondono più.") },
+  { tab: "images", filter: "large", priority: "Media", label: tr("Immagini oltre 100 KB"), fix: tr("Comprimi o converti in WebP/AVIF per velocizzare le pagine.") },
+  { tab: "images", filter: "missing-alt", priority: "Media", label: tr("Immagini senza alt"), fix: tr("Aggiungi un testo alternativo descrittivo (o alt=\"\" se decorativa).") },
+  { tab: "perf", filter: "slow", priority: "Media", label: tr("Pagine con risposta oltre 1 s"), fix: tr("Attiva cache e verifica hosting e query lente.") },
+  { tab: "sitemap", filter: "orphan", priority: "Media", label: tr("Pagine orfane"), fix: tr("Linka queste pagine da altre pagine del sito.") },
+  { tab: "sitemap", filter: "non-indexable", priority: "Media", label: tr("URL non indicizzabili nella sitemap"), fix: tr("La sitemap deve contenere solo pagine indicizzabili con risposta 200.") },
+  { tab: "schema", filter: "warnings", priority: "Media", label: tr("Dati strutturati con proprietà mancanti"), fix: tr("Aggiungi le proprietà richieste per ottenere i risultati avanzati.") },
+  { tab: "duplicates", filter: "exact", priority: "Media", label: tr("Contenuti duplicati"), fix: tr("Unisci le pagine o indica la principale con un canonical.") },
+  { tab: "codes", filter: "redirect", priority: "Bassa", label: tr("Redirect (3xx)"), fix: tr("Aggiorna i link interni perché puntino direttamente alla destinazione.") },
+  { tab: "title", filter: "long", priority: "Bassa", label: tr("Title oltre 60 caratteri"), fix: tr("Accorcia: in Google verrà troncato.") },
+  { tab: "title", filter: "short", priority: "Bassa", label: tr("Title sotto 30 caratteri"), fix: tr("Sfrutta meglio lo spazio con parole chiave utili.") },
+  { tab: "meta_description", filter: "long", priority: "Bassa", label: tr("Meta description oltre 155 caratteri"), fix: tr("Accorcia: in Google verrà troncata.") },
+  { tab: "meta_description", filter: "short", priority: "Bassa", label: tr("Meta description sotto 70 caratteri"), fix: tr("Aggiungi dettagli e un invito all'azione.") },
+  { tab: "h1", filter: "long", priority: "Bassa", label: tr("H1 oltre 70 caratteri"), fix: tr("Rendi l'H1 più conciso.") },
+  { tab: "duplicates", filter: "near", priority: "Bassa", label: tr("Contenuti quasi duplicati"), fix: tr("Differenzia i testi o unisci le pagine simili.") },
+  { tab: "duplicates", filter: "low", priority: "Bassa", label: tr("Contenuto scarso"), fix: tr("Arricchisci il testo o valuta un noindex.") },
+  { tab: "images", filter: "no-size", priority: "Bassa", label: tr("Immagini senza width/height"), fix: tr("Indica le dimensioni per evitare spostamenti del layout (CLS).") },
+  { tab: "index", filter: "no-canonical", priority: "Bassa", label: tr("Canonical mancante"), fix: tr("Aggiungi un canonical auto-referenziale.") },
+  { tab: "sitemap", filter: "missing", priority: "Bassa", label: tr("Pagine indicizzabili non nella sitemap"), fix: tr("Aggiungile alla sitemap se vuoi che Google le trovi.") },
+  { tab: "hreflang", filter: "no-x-default", priority: "Bassa", label: tr("Hreflang senza x-default"), fix: tr("Indica la versione predefinita con hreflang=\"x-default\".") },
+  { tab: "codes", filter: "blocked", priority: "Bassa", label: tr("URL bloccati da robots.txt"), fix: tr("Verifica che il blocco sia voluto.") },
 ];
 
 export type Issue = IssueDef & { count: number };

@@ -1,0 +1,309 @@
+/**
+ * Italian is the source language: texts are written in Italian and looked up here for English.
+ * Switching language reloads the window, so module-level labels (columns, filters, issues) follow.
+ */
+export type Lang = "it" | "en";
+
+const KEY = "cyberfrog.lang";
+
+function detect(): Lang {
+  try {
+    const saved = localStorage.getItem(KEY);
+    if (saved === "it" || saved === "en") return saved;
+  } catch {
+    // storage unavailable: fall back to the system language
+  }
+  return navigator.language.toLowerCase().startsWith("it") ? "it" : "en";
+}
+
+export const LANG: Lang = detect();
+export const LOCALE = LANG === "it" ? "it-IT" : "en-US";
+
+export function setLang(lang: Lang): void {
+  try {
+    localStorage.setItem(KEY, lang);
+  } catch {
+    // not persisted; the reload below still shows the chosen language for this session
+  }
+  location.reload();
+}
+
+/** The text in the current language; `{name}` placeholders are filled from `vars`. */
+export function tr(it: string, vars: Record<string, string | number> = {}): string {
+  const text = LANG === "en" ? (EN[it] ?? it) : it;
+  return text.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
+}
+
+/** True when `it` has an English entry; the self-check uses it to catch untranslated labels. */
+export function hasTranslation(it: string): boolean {
+  return it in EN;
+}
+
+/** Errors come from Rust in Italian; translate their known prefixes and keep the detail. */
+export function trError(message: string): string {
+  if (LANG === "it") return message;
+  const prefix = ERROR_PREFIXES.find(([it]) => message.startsWith(it));
+  return prefix ? prefix[1] + message.slice(prefix[0].length) : message;
+}
+
+const ERROR_PREFIXES: [string, string][] = [
+  ["URL non valido", "Invalid URL"],
+  ["L'URL deve iniziare con http:// o https://", "The URL must start with http:// or https://"],
+  ["Il file non è un crawl CyberFrog leggibile", "Not a readable CyberFrog crawl file"],
+  ["Salvataggio non riuscito", "Save failed"],
+  ["Pattern di esclusione non valido", "Invalid exclude pattern"],
+];
+
+const EN: Record<string, string> = {
+  // shell
+  "URL di partenza": "Start URL",
+  "https://esempio.it": "https://example.com",
+  Avvia: "Start",
+  Stop: "Stop",
+  "Interruzione…": "Stopping…",
+  Impostazioni: "Settings",
+  "Apri…": "Open…",
+  "Salva come…": "Save as…",
+  "Scansione in corso…": "Crawling…",
+  "Scansiona un sito": "Crawl a website",
+  "Inserisci un URL e premi Avvia. CyberFrog segue i link dello stesso dominio e rispetta robots.txt.":
+    "Enter a URL and press Start. CyberFrog follows links on the same domain and respects robots.txt.",
+  "Crawl recenti": "Recent crawls",
+  "Crawl vuoto": "Empty crawl",
+  "{n} URL · {date}": "{n} URLs · {date}",
+  "URL analizzati": "URLs crawled",
+  "Link esterni verificati": "External links checked",
+  "Immagini verificate": "Images checked",
+  " · {n} in coda": " · {n} queued",
+  Pronto: "Ready",
+  "{n} URL · {host}": "{n} URLs · {host}",
+  " · interrotto dopo {s} s": " · stopped after {s} s",
+  " · completato in {s} s": " · completed in {s} s",
+  "Crawl salvato in {path}": "Crawl saved to {path}",
+  "Sitemap salvata in {path}": "Sitemap saved to {path}",
+  "Crawl CyberFrog": "CyberFrog crawl",
+  "Genera sitemap XML": "Generate XML sitemap",
+  "Powered by": "Powered by",
+  "tempo mediano": "median response",
+  Indicizzabili: "Indexable",
+  Bloccati: "Blocked",
+  "Link rotti": "Broken links",
+  "Lingua": "Language",
+  // tabs
+  Problemi: "Issues",
+  Interni: "Internal",
+  "Codici di risposta": "Response codes",
+  Indicizzabilità: "Indexability",
+  "Link esterni": "External links",
+  Immagini: "Images",
+  Sitemap: "Sitemap",
+  Prestazioni: "Performance",
+  Hreflang: "Hreflang",
+  "Dati strutturati": "Structured data",
+  Duplicati: "Duplicates",
+  // columns
+  Stato: "Status",
+  Indicizzabile: "Indexable",
+  Motivo: "Reason",
+  Parole: "Words",
+  Profondità: "Depth",
+  Outlink: "Outlinks",
+  Inlink: "Inlinks",
+  "Outlink esterni": "External outlinks",
+  "Tempo (ms)": "Time (ms)",
+  Peso: "Size",
+  "Redirect a": "Redirects to",
+  "Pagina di origine": "Source page",
+  "Link rotto": "Broken link",
+  Tipo: "Type",
+  Esterno: "External",
+  Interno: "Internal",
+  Immagine: "Image",
+  "Peso (byte)": "Size (bytes)",
+  Pagine: "Pages",
+  "Alt mancante": "Missing alt",
+  "Senza dimensioni": "No dimensions",
+  "Nella sitemap": "In sitemap",
+  Lingue: "Languages",
+  Annotazioni: "Annotations",
+  "Tipi schema.org": "schema.org types",
+  Formato: "Format",
+  "Duplicati esatti": "Exact duplicates",
+  "Quasi duplicati": "Near duplicates",
+  "Similarità max": "Max similarity",
+  "Pagina più simile": "Most similar page",
+  Lunghezza: "Length",
+  Occorrenze: "Occurrences",
+  Priorità: "Priority",
+  Problema: "Issue",
+  Report: "Report",
+  "Cosa fare": "How to fix",
+  Sì: "Yes",
+  No: "No",
+  Pagina: "Page",
+  "Width/height": "Width/height",
+  "(mancante)": "(missing)",
+  '(vuoto: alt="")': '(empty: alt="")',
+  // table + panels
+  "Esporta CSV": "Export CSV",
+  "Nessun URL in questa vista.": "No URLs in this view.",
+  "Esportata 1 riga": "Exported 1 row",
+  "Esportate {n} righe": "Exported {n} rows",
+  "Esportazione non riuscita: {err}": "Export failed: {err}",
+  "Dettaglio di {url}": "Details of {url}",
+  "Link della pagina": "Page links",
+  "Chiudi dettaglio": "Close details",
+  "Carico i link…": "Loading links…",
+  "Pagine che usano {src}": "Pages using {src}",
+  "Uso dell'immagine": "Image usage",
+  "Carico le pagine…": "Loading pages…",
+  // statuses and reasons
+  "Bloccato da robots.txt": "Blocked by robots.txt",
+  "Nessuna risposta": "No response",
+  "Nessuna risposta: {e}": "No response: {e}",
+  "Errore client (4xx)": "Client error (4xx)",
+  "Errore server (5xx)": "Server error (5xx)",
+  Canonicalizzata: "Canonicalised",
+  Noindex: "Noindex",
+  Nofollow: "Nofollow",
+  // filters
+  Tutti: "All",
+  Tutte: "All",
+  Mancante: "Missing",
+  Duplicato: "Duplicate",
+  "Oltre {n} caratteri": "Over {n} characters",
+  "Sotto {n} caratteri": "Under {n} characters",
+  "2xx Successo": "2xx Success",
+  "3xx Redirect": "3xx Redirect",
+  "4xx Errore client": "4xx Client error",
+  "5xx Errore server": "5xx Server error",
+  "Bloccati da robots.txt": "Blocked by robots.txt",
+  Esterni: "External",
+  "Non indicizzabili": "Non-indexable",
+  Canonicalizzate: "Canonicalised",
+  "Canonical auto-referenziale": "Self-referencing canonical",
+  "Canonical mancante": "Missing canonical",
+  "Canonical verso URL non 200": "Canonical to non-200 URL",
+  "X-Robots-Tag presente": "Has X-Robots-Tag",
+  "Oltre 100 KB": "Over 100 KB",
+  "Alt vuoto (decorative)": "Empty alt (decorative)",
+  "Senza width/height": "Missing width/height",
+  Errori: "Errors",
+  "Indicizzabili non nella sitemap": "Indexable, not in sitemap",
+  "Orfane (nessun inlink)": "Orphans (no inlinks)",
+  "Non indicizzabili nella sitemap": "Non-indexable in sitemap",
+  "Risposta oltre 1 s": "Response over 1 s",
+  "Risposta oltre 3 s": "Response over 3 s",
+  "HTML oltre 512 KB": "HTML over 512 KB",
+  "Codice non valido": "Invalid code",
+  "Senza return link": "Missing return link",
+  "Alternative non 200": "Non-200 alternates",
+  "Senza auto-riferimento": "Missing self-reference",
+  "Senza x-default": "Missing x-default",
+  "Codice non valido: {codes}": "Invalid code: {codes}",
+  "Manca il return link da {n}": "Missing return link from {n}",
+  "{n} alternative non 200": "{n} non-200 alternates",
+  "Manca l'auto-riferimento": "Missing self-reference",
+  "Manca x-default": "Missing x-default",
+  "Con dati strutturati": "With structured data",
+  "Senza dati strutturati": "Without structured data",
+  "JSON non valido": "Invalid JSON",
+  "Proprietà mancanti": "Missing properties",
+  "Quasi duplicati (≥ 90%)": "Near duplicates (≥ 90%)",
+  "Contenuto scarso (< {n} parole)": "Low content (< {n} words)",
+  // issues
+  Alta: "High",
+  Media: "Medium",
+  Bassa: "Low",
+  "Pagine con errore 4xx": "Pages returning 4xx",
+  "Ripristina la pagina o reindirizzala (301) e aggiorna i link che la puntano.":
+    "Restore the page or redirect it (301) and update the links pointing to it.",
+  "Pagine con errore 5xx": "Pages returning 5xx",
+  "Errore del server: controlla hosting, plugin e log.": "Server error: check hosting, plugins and logs.",
+  "Link interni rotti": "Broken internal links",
+  "Correggi o rimuovi i link verso pagine che non esistono.": "Fix or remove links to pages that don't exist.",
+  "Title mancante": "Missing title",
+  "Scrivi un title unico che descriva la pagina.": "Write a unique title that describes the page.",
+  "Punta il canonical a una pagina che risponde 200.": "Point the canonical to a page that returns 200.",
+  "Dati strutturati con JSON non valido": "Structured data with invalid JSON",
+  "Correggi la sintassi del JSON-LD: Google lo ignora interamente.": "Fix the JSON-LD syntax: Google ignores it entirely.",
+  "Codici hreflang non validi": "Invalid hreflang codes",
+  "Usa codici lingua-regione ISO, es. it-IT, en-GB.": "Use ISO language-region codes, e.g. it-IT, en-GB.",
+  "Hreflang senza return link": "Hreflang without return link",
+  "Ogni pagina alternativa deve puntare di ritorno a questa.": "Every alternate page must link back to this one.",
+  "Title duplicati": "Duplicate titles",
+  "Rendi ogni title unico per la sua pagina.": "Make each title unique to its page.",
+  "Meta description mancante": "Missing meta description",
+  "Aggiungi una descrizione che inviti al clic.": "Add a description that invites the click.",
+  "Meta description duplicate": "Duplicate meta descriptions",
+  "Scrivi descrizioni diverse per pagine diverse.": "Write different descriptions for different pages.",
+  "H1 mancante": "Missing H1",
+  "Aggiungi un H1 con l'argomento principale della pagina.": "Add an H1 with the page's main topic.",
+  "Link esterni rotti": "Broken external links",
+  "Aggiorna o rimuovi i link verso siti che non rispondono più.": "Update or remove links to sites that no longer respond.",
+  "Immagini oltre 100 KB": "Images over 100 KB",
+  "Comprimi o converti in WebP/AVIF per velocizzare le pagine.": "Compress or convert to WebP/AVIF to speed up pages.",
+  "Immagini senza alt": "Images without alt",
+  'Aggiungi un testo alternativo descrittivo (o alt="" se decorativa).':
+    'Add descriptive alternative text (or alt="" if decorative).',
+  "Pagine con risposta oltre 1 s": "Pages responding in over 1 s",
+  "Attiva cache e verifica hosting e query lente.": "Enable caching and check hosting and slow queries.",
+  "Pagine orfane": "Orphan pages",
+  "Linka queste pagine da altre pagine del sito.": "Link to these pages from other pages of the site.",
+  "URL non indicizzabili nella sitemap": "Non-indexable URLs in sitemap",
+  "La sitemap deve contenere solo pagine indicizzabili con risposta 200.":
+    "The sitemap should only list indexable pages returning 200.",
+  "Dati strutturati con proprietà mancanti": "Structured data missing properties",
+  "Aggiungi le proprietà richieste per ottenere i risultati avanzati.":
+    "Add the required properties to qualify for rich results.",
+  "Contenuti duplicati": "Duplicate content",
+  "Unisci le pagine o indica la principale con un canonical.": "Merge the pages or point to the main one with a canonical.",
+  "Redirect (3xx)": "Redirects (3xx)",
+  "Aggiorna i link interni perché puntino direttamente alla destinazione.":
+    "Update internal links to point straight to the destination.",
+  "Title oltre 60 caratteri": "Titles over 60 characters",
+  "Accorcia: in Google verrà troncato.": "Shorten it: Google will truncate it.",
+  "Title sotto 30 caratteri": "Titles under 30 characters",
+  "Sfrutta meglio lo spazio con parole chiave utili.": "Use the space better with useful keywords.",
+  "Meta description oltre 155 caratteri": "Meta descriptions over 155 characters",
+  "Accorcia: in Google verrà troncata.": "Shorten it: Google will truncate it.",
+  "Meta description sotto 70 caratteri": "Meta descriptions under 70 characters",
+  "Aggiungi dettagli e un invito all'azione.": "Add details and a call to action.",
+  "H1 oltre 70 caratteri": "H1 over 70 characters",
+  "Rendi l'H1 più conciso.": "Make the H1 more concise.",
+  "Contenuti quasi duplicati": "Near-duplicate content",
+  "Differenzia i testi o unisci le pagine simili.": "Differentiate the texts or merge similar pages.",
+  "Contenuto scarso": "Low content",
+  "Arricchisci il testo o valuta un noindex.": "Expand the text or consider noindex.",
+  "Immagini senza width/height": "Images without width/height",
+  "Indica le dimensioni per evitare spostamenti del layout (CLS).": "Set dimensions to avoid layout shifts (CLS).",
+  "Aggiungi un canonical auto-referenziale.": "Add a self-referencing canonical.",
+  "Pagine indicizzabili non nella sitemap": "Indexable pages not in sitemap",
+  "Aggiungile alla sitemap se vuoi che Google le trovi.": "Add them to the sitemap if you want Google to find them.",
+  "Hreflang senza x-default": "Hreflang without x-default",
+  'Indica la versione predefinita con hreflang="x-default".': 'Mark the default version with hreflang="x-default".',
+  "URL bloccati da robots.txt": "URLs blocked by robots.txt",
+  "Verifica che il blocco sia voluto.": "Check that the block is intended.",
+  // settings
+  "Impostazioni crawl": "Crawl settings",
+  Limiti: "Limits",
+  "Numero massimo di URL": "Maximum number of URLs",
+  "Richieste in parallelo": "Parallel requests",
+  "Più alto è più veloce ma pesa di più sul server. 8 va bene per quasi tutti i siti.":
+    "Higher is faster but puts more load on the server. 8 suits almost every site.",
+  "User agent": "User agent",
+  "Identità del crawler": "Crawler identity",
+  "Personalizzato…": "Custom…",
+  "User agent personalizzato": "Custom user agent",
+  "MioCrawler/1.0": "MyCrawler/1.0",
+  "Cosa analizzare": "What to check",
+  "Rispetta robots.txt": "Respect robots.txt",
+  "Verifica i link esterni": "Check external links",
+  "Verifica peso e stato delle immagini": "Check image size and status",
+  "Leggi le sitemap XML": "Read XML sitemaps",
+  "Escludi URL": "Exclude URLs",
+  "Un'espressione regolare per riga": "One regular expression per line",
+  "Ripristina predefinite": "Restore defaults",
+  Annulla: "Cancel",
+  Salva: "Save",
+};

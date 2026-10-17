@@ -54,6 +54,7 @@ import {
   type Page,
 } from "./pages";
 import "./App.css";
+import { LANG, LOCALE, setLang, tr, trError } from "./i18n";
 
 const num = (v: number | null) => <span className="num">{v ?? ""}</span>;
 const ms = (v: number | null) => <span className={`num${(v ?? 0) > SLOW_MS ? " heavy" : ""}`}>{v ?? ""}</span>;
@@ -61,19 +62,19 @@ const ms = (v: number | null) => <span className={`num${(v ?? 0) > SLOW_MS ? " h
 const page = helperFor<Page>();
 const statusColumn = page.accessor(statusLabel, {
   id: "status",
-  header: "Stato",
+  header: tr("Stato"),
   size: 150,
   cell: (c) => <span className={`badge ${statusKind(c.row.original)}`}>{c.getValue()}</span>,
 });
-const indexableColumn = page.accessor((p) => (nonIndexableReason(p) === null ? "Sì" : "No"), {
+const indexableColumn = page.accessor((p) => (nonIndexableReason(p) === null ? tr("Sì") : tr("No")), {
   id: "indexable",
-  header: "Indicizzabile",
+  header: tr("Indicizzabile"),
   size: 115,
-  cell: (c) => <span className={`badge ${c.getValue() === "Sì" ? "ok" : "client"}`}>{c.getValue()}</span>,
+  cell: (c) => <span className={`badge ${c.getValue() === tr("Sì") ? "ok" : "client"}`}>{c.getValue()}</span>,
 });
 const reasonColumn = page.accessor((p) => nonIndexableReason(p) ?? "", {
   id: "reason",
-  header: "Motivo",
+  header: tr("Motivo"),
   size: 190,
 });
 const internalColumns = page.columns([
@@ -87,39 +88,39 @@ const internalColumns = page.columns([
   page.accessor("canonical", { header: "Canonical", size: 300 }),
   page.accessor("meta_robots", { header: "Meta robots", size: 140 }),
   page.accessor("x_robots_tag", { header: "X-Robots-Tag", size: 160 }),
-  page.accessor("word_count", { header: "Parole", size: 80, cell: (c) => num(c.getValue()) }),
-  page.accessor("depth", { header: "Profondità", size: 95, cell: (c) => num(c.getValue()) }),
-  page.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
-  page.accessor("outlinks", { header: "Outlink", size: 85, cell: (c) => num(c.getValue()) }),
-  page.accessor("external_outlinks", { header: "Outlink esterni", size: 125, cell: (c) => num(c.getValue()) }),
-  page.accessor("response_ms", { header: "Tempo (ms)", size: 100, cell: (c) => ms(c.getValue()) }),
-  page.accessor("size_bytes", { header: "Peso", size: 90, cell: (c) => <span className="num">{formatBytes(c.getValue())}</span> }),
+  page.accessor("word_count", { header: tr("Parole"), size: 80, cell: (c) => num(c.getValue()) }),
+  page.accessor("depth", { header: tr("Profondità"), size: 95, cell: (c) => num(c.getValue()) }),
+  page.accessor("inlinks", { header: tr("Inlink"), size: 75, cell: (c) => num(c.getValue()) }),
+  page.accessor("outlinks", { header: tr("Outlink"), size: 85, cell: (c) => num(c.getValue()) }),
+  page.accessor("external_outlinks", { header: tr("Outlink esterni"), size: 125, cell: (c) => num(c.getValue()) }),
+  page.accessor("response_ms", { header: tr("Tempo (ms)"), size: 100, cell: (c) => ms(c.getValue()) }),
+  page.accessor("size_bytes", { header: tr("Peso"), size: 90, cell: (c) => <span className="num">{formatBytes(c.getValue())}</span> }),
   page.accessor("content_type", { header: "Content type", size: 180 }),
-  page.accessor("redirect_to", { header: "Redirect a", size: 300 }),
+  page.accessor("redirect_to", { header: tr("Redirect a"), size: 300 }),
 ]);
 const perfColumns = page.columns([
   page.accessor("url", { header: "URL", size: 460 }),
   statusColumn,
-  page.accessor("response_ms", { header: "Tempo (ms)", size: 110, cell: (c) => ms(c.getValue()) }),
-  page.accessor("size_bytes", { header: "Peso", size: 100, cell: (c) => <span className="num">{formatBytes(c.getValue())}</span> }),
+  page.accessor("response_ms", { header: tr("Tempo (ms)"), size: 110, cell: (c) => ms(c.getValue()) }),
+  page.accessor("size_bytes", { header: tr("Peso"), size: 100, cell: (c) => <span className="num">{formatBytes(c.getValue())}</span> }),
   page.accessor("content_type", { header: "Content type", size: 200 }),
-  page.accessor("word_count", { header: "Parole", size: 80, cell: (c) => num(c.getValue()) }),
+  page.accessor("word_count", { header: tr("Parole"), size: 80, cell: (c) => num(c.getValue()) }),
 ]);
 const codeColumns = page.columns([
   page.accessor("url", { header: "URL", size: 460 }),
   statusColumn,
-  page.accessor("redirect_to", { header: "Redirect a", size: 360 }),
+  page.accessor("redirect_to", { header: tr("Redirect a"), size: 360 }),
   page.accessor("content_type", { header: "Content type", size: 180 }),
-  page.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
+  page.accessor("inlinks", { header: tr("Inlink"), size: 75, cell: (c) => num(c.getValue()) }),
 ]);
 
 const sitemapColumns = page.columns([
   page.accessor("url", { header: "URL", size: 460 }),
   statusColumn,
   indexableColumn,
-  page.accessor((p) => (p.in_sitemap ? "Sì" : "No"), { id: "in_sitemap", header: "Nella sitemap", size: 120 }),
-  page.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
-  page.accessor("depth", { header: "Profondità", size: 95, cell: (c) => num(c.getValue()) }),
+  page.accessor((p) => (p.in_sitemap ? tr("Sì") : tr("No")), { id: "in_sitemap", header: tr("Nella sitemap"), size: 120 }),
+  page.accessor("inlinks", { header: tr("Inlink"), size: 75, cell: (c) => num(c.getValue()) }),
+  page.accessor("depth", { header: tr("Profondità"), size: 95, cell: (c) => num(c.getValue()) }),
 ]);
 
 const indexColumns = page.columns([
@@ -142,60 +143,60 @@ const externalColumns = ext.columns([
   ext.accessor("url", { header: "URL", size: 520 }),
   ext.accessor((e) => codeLabel(e.status, e.error), {
     id: "status",
-    header: "Stato",
+    header: tr("Stato"),
     size: 170,
     cell: (c) => codeCell(c.row.original.status, c.row.original.error),
   }),
   ext.accessor("content_type", { header: "Content type", size: 200 }),
-  ext.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
+  ext.accessor("inlinks", { header: tr("Inlink"), size: 75, cell: (c) => num(c.getValue()) }),
 ]);
 const EXTERNAL_FILTERS = statusFilters<ExternalLink>();
 
 const broke = helperFor<BrokenLink>();
 const brokenColumns = broke.columns([
-  broke.accessor("source", { header: "Pagina di origine", size: 380 }),
-  broke.accessor("target", { header: "Link rotto", size: 380 }),
+  broke.accessor("source", { header: tr("Pagina di origine"), size: 380 }),
+  broke.accessor("target", { header: tr("Link rotto"), size: 380 }),
   broke.accessor("anchor", { header: "Anchor text", size: 220 }),
   broke.accessor((b) => codeLabel(b.status, b.error), {
     id: "status",
-    header: "Stato",
+    header: tr("Stato"),
     size: 170,
     cell: (c) => codeCell(c.row.original.status, c.row.original.error),
   }),
-  broke.accessor((b) => (b.external ? "Esterno" : "Interno"), { id: "kind", header: "Tipo", size: 90 }),
+  broke.accessor((b) => (b.external ? tr("Esterno") : tr("Interno")), { id: "kind", header: tr("Tipo"), size: 90 }),
 ]);
 
 const img = helperFor<ImageRow>();
 const imageColumns = img.columns([
-  img.accessor("src", { header: "Immagine", size: 460 }),
+  img.accessor("src", { header: tr("Immagine"), size: 460 }),
   img.accessor((i) => codeLabel(i.status, i.error), {
     id: "status",
-    header: "Stato",
+    header: tr("Stato"),
     size: 130,
     cell: (c) => codeCell(c.row.original.status, c.row.original.error),
   }),
   img.accessor("bytes", {
-    header: "Peso (byte)",
+    header: tr("Peso (byte)"),
     size: 110,
     cell: (c) => (
       <span className={`num${(c.getValue() ?? 0) > LARGE_IMAGE_BYTES ? " heavy" : ""}`}>{formatBytes(c.getValue())}</span>
     ),
   }),
   img.accessor("alt", { header: "Alt text", size: 260 }),
-  img.accessor("pages", { header: "Pagine", size: 80, cell: (c) => num(c.getValue()) }),
-  img.accessor("missing_alt", { header: "Alt mancante", size: 115, cell: (c) => num(c.getValue()) }),
-  img.accessor("missing_size", { header: "Senza dimensioni", size: 140, cell: (c) => num(c.getValue()) }),
+  img.accessor("pages", { header: tr("Pagine"), size: 80, cell: (c) => num(c.getValue()) }),
+  img.accessor("missing_alt", { header: tr("Alt mancante"), size: 115, cell: (c) => num(c.getValue()) }),
+  img.accessor("missing_size", { header: tr("Senza dimensioni"), size: 140, cell: (c) => num(c.getValue()) }),
   img.accessor("content_type", { header: "Content type", size: 140 }),
 ]);
 
 const hl = helperFor<HreflangPage>();
 const hreflangColumns = hl.columns([
   hl.accessor("url", { header: "URL", size: 420 }),
-  hl.accessor("langs", { header: "Lingue", size: 240 }),
-  hl.accessor("count", { header: "Annotazioni", size: 110, cell: (c) => num(c.getValue()) }),
+  hl.accessor("langs", { header: tr("Lingue"), size: 240 }),
+  hl.accessor("count", { header: tr("Annotazioni"), size: 110, cell: (c) => num(c.getValue()) }),
   hl.accessor(hreflangIssues, {
     id: "issues",
-    header: "Problemi",
+    header: tr("Problemi"),
     size: 420,
     cell: (c) => (c.getValue() ? <span className="issue">{c.getValue()}</span> : <span className="badge ok">OK</span>),
   }),
@@ -204,45 +205,45 @@ const hreflangColumns = hl.columns([
 const sd = helperFor<SchemaPage>();
 const schemaColumns = sd.columns([
   sd.accessor("url", { header: "URL", size: 420 }),
-  sd.accessor((r) => r.types.join(", "), { id: "types", header: "Tipi schema.org", size: 300 }),
-  sd.accessor("formats", { header: "Formato", size: 140 }),
+  sd.accessor((r) => r.types.join(", "), { id: "types", header: tr("Tipi schema.org"), size: 300 }),
+  sd.accessor("formats", { header: tr("Formato"), size: 140 }),
   sd.accessor("issues", {
-    header: "Problemi",
+    header: tr("Problemi"),
     size: 400,
     cell: (c) => (c.getValue() ? <span className="issue">{c.getValue()}</span> : ""),
   }),
 ]);
 
-const pct = new Intl.NumberFormat("it-IT", { style: "percent", maximumFractionDigits: 0 });
+const pct = new Intl.NumberFormat(LOCALE, { style: "percent", maximumFractionDigits: 0 });
 const dup = helperFor<DupPage>();
 const dupColumns = dup.columns([
   dup.accessor("url", { header: "URL", size: 420 }),
-  dup.accessor("word_count", { header: "Parole", size: 80, cell: (c) => num(c.getValue()) }),
-  dup.accessor("exact", { header: "Duplicati esatti", size: 130, cell: (c) => num(c.getValue()) }),
-  dup.accessor("near", { header: "Quasi duplicati", size: 130, cell: (c) => num(c.getValue()) }),
+  dup.accessor("word_count", { header: tr("Parole"), size: 80, cell: (c) => num(c.getValue()) }),
+  dup.accessor("exact", { header: tr("Duplicati esatti"), size: 130, cell: (c) => num(c.getValue()) }),
+  dup.accessor("near", { header: tr("Quasi duplicati"), size: 130, cell: (c) => num(c.getValue()) }),
   dup.accessor("similarity", {
-    header: "Similarità max",
+    header: tr("Similarità max"),
     size: 125,
     cell: (c) => {
       const v = c.getValue();
       return <span className={`num${v !== null && v >= 0.9 ? " heavy" : ""}`}>{v === null ? "" : pct.format(v)}</span>;
     },
   }),
-  dup.accessor("closest", { header: "Pagina più simile", size: 380 }),
+  dup.accessor("closest", { header: tr("Pagina più simile"), size: 380 }),
 ]);
 
 const PRIORITY_BADGE: Record<Issue["priority"], string> = { Alta: "client", Media: "redirect", Bassa: "blocked" };
 const iss = helperFor<Issue>();
 const issueColumns = iss.columns([
   iss.accessor("priority", {
-    header: "Priorità",
+    header: tr("Priorità"),
     size: 95,
-    cell: (c) => <span className={`badge ${PRIORITY_BADGE[c.getValue()]}`}>{c.getValue()}</span>,
+    cell: (c) => <span className={`badge ${PRIORITY_BADGE[c.getValue()]}`}>{tr(c.getValue())}</span>,
   }),
-  iss.accessor("label", { header: "Problema", size: 320 }),
+  iss.accessor("label", { header: tr("Problema"), size: 320 }),
   iss.accessor("count", { header: "URL", size: 70, cell: (c) => num(c.getValue()) }),
-  iss.accessor((i) => TABS.find((t) => t.id === i.tab)?.label ?? i.tab, { id: "report", header: "Report", size: 150 }),
-  iss.accessor("fix", { header: "Cosa fare", size: 520 }),
+  iss.accessor((i) => TABS.find((t) => t.id === i.tab)?.label ?? i.tab, { id: "report", header: tr("Report"), size: 150 }),
+  iss.accessor("fix", { header: tr("Cosa fare"), size: 520 }),
 ]);
 
 const meta = helperFor<MetaRow>();
@@ -252,8 +253,8 @@ const metaTabs = CHECKS.map((check) => ({
   columns: meta.columns([
     meta.accessor("url", { header: "URL", size: 420 }),
     meta.accessor("value", { header: check.label, size: 460 }),
-    meta.accessor("length", { header: "Lunghezza", size: 95, cell: (c) => num(c.getValue()) }),
-    meta.accessor("occurrences", { header: "Occorrenze", size: 105, cell: (c) => num(c.getValue()) }),
+    meta.accessor("length", { header: tr("Lunghezza"), size: 95, cell: (c) => num(c.getValue()) }),
+    meta.accessor("occurrences", { header: tr("Occorrenze"), size: 105, cell: (c) => num(c.getValue()) }),
   ]),
 }));
 
@@ -272,23 +273,23 @@ type Tab =
   | "duplicates"
   | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
-  { id: "issues", label: "Problemi" },
-  { id: "internal", label: "Interni" },
-  { id: "codes", label: "Codici di risposta" },
-  { id: "index", label: "Indicizzabilità" },
-  { id: "external", label: "Link esterni" },
-  { id: "broken", label: "Link rotti" },
-  { id: "images", label: "Immagini" },
-  { id: "sitemap", label: "Sitemap" },
-  { id: "perf", label: "Prestazioni" },
-  { id: "hreflang", label: "Hreflang" },
-  { id: "schema", label: "Dati strutturati" },
-  { id: "duplicates", label: "Duplicati" },
+  { id: "issues", label: tr("Problemi") },
+  { id: "internal", label: tr("Interni") },
+  { id: "codes", label: tr("Codici di risposta") },
+  { id: "index", label: tr("Indicizzabilità") },
+  { id: "external", label: tr("Link esterni") },
+  { id: "broken", label: tr("Link rotti") },
+  { id: "images", label: tr("Immagini") },
+  { id: "sitemap", label: tr("Sitemap") },
+  { id: "perf", label: tr("Prestazioni") },
+  { id: "hreflang", label: tr("Hreflang") },
+  { id: "schema", label: tr("Dati strutturati") },
+  { id: "duplicates", label: tr("Duplicati") },
   ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
 ];
 
-const fmt = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
-const when = new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" });
+const fmt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
+const when = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short" });
 
 /** Mirror the Rust structs in src-tauri/src/lib.rs and crawler.rs. */
 type CrawlData = {
@@ -303,9 +304,9 @@ type CrawlData = {
 type CrawlSummary = { path: string; start_url: string | null; pages: number; modified_ms: number };
 type Progress = { stage: "pages" | "external" | "images"; done: number; pending: number };
 const STAGE_LABEL: Record<Progress["stage"], string> = {
-  pages: "URL analizzati",
-  external: "Link esterni verificati",
-  images: "Immagini verificate",
+  pages: tr("URL analizzati"),
+  external: tr("Link esterni verificati"),
+  images: tr("Immagini verificate"),
 };
 
 const SQLITE_FILTER = [{ name: "Crawl CyberFrog", extensions: ["sqlite"] }];
@@ -373,7 +374,7 @@ export default function App() {
       setElapsed((performance.now() - t0) / 1000);
       refreshRecent();
     } catch (err) {
-      setError(String(err));
+      setError(trError(String(err)));
     } finally {
       setRunning(false);
       setProgress(null);
@@ -382,7 +383,7 @@ export default function App() {
 
   function stopCrawl() {
     setStopped(true);
-    invoke("stop_crawl").catch((err) => setError(String(err)));
+    invoke("stop_crawl").catch((err) => setError(trError(String(err))));
   }
 
   async function openCrawl(path?: string) {
@@ -394,7 +395,7 @@ export default function App() {
       show(await invoke<CrawlData>("open_crawl", { path: picked }));
       setElapsed(null);
     } catch (err) {
-      setError(String(err));
+      setError(trError(String(err)));
     }
   }
 
@@ -405,9 +406,9 @@ export default function App() {
     if (!to) return;
     try {
       await invoke("write_text_file", { path: to, contents: buildSitemapXml(pages) });
-      setNotice(`Sitemap salvata in ${to}`);
+      setNotice(tr("Sitemap salvata in {path}", { path: to }));
     } catch (err) {
-      setError(String(err));
+      setError(trError(String(err)));
     }
   }
 
@@ -419,9 +420,9 @@ export default function App() {
     if (!to) return;
     try {
       await invoke("save_crawl_as", { from: crawlPath, to });
-      setNotice(`Crawl salvato in ${to}`);
+      setNotice(tr("Crawl salvato in {path}", { path: to }));
     } catch (err) {
-      setError(String(err));
+      setError(trError(String(err)));
     }
   }
 
@@ -461,11 +462,13 @@ export default function App() {
   const highIssues = issues.filter((i) => i.priority === "Alta").length;
   const host = pages[0] ? new URL(pages[0].url).hostname : "crawl";
   const statusText = running
-    ? `${STAGE_LABEL[progress?.stage ?? "pages"]}: ${(progress?.done ?? 0).toLocaleString("it-IT")}` +
-      (progress && progress.pending > 0 ? ` · ${progress.pending.toLocaleString("it-IT")} in coda` : "")
+    ? `${STAGE_LABEL[progress?.stage ?? "pages"]}: ${(progress?.done ?? 0).toLocaleString(LOCALE)}` +
+      (progress && progress.pending > 0 ? tr(" · {n} in coda", { n: progress.pending.toLocaleString(LOCALE) }) : "")
     : pages.length > 0
-      ? `${pages.length.toLocaleString("it-IT")} URL · ${host}` +
-        (elapsed !== null ? ` · ${stopped ? "interrotto dopo" : "completato in"} ${fmt.format(elapsed)} s` : "")
+      ? tr("{n} URL · {host}", { n: pages.length.toLocaleString(LOCALE), host }) +
+        (elapsed !== null
+          ? tr(stopped ? " · interrotto dopo {s} s" : " · completato in {s} s", { s: fmt.format(elapsed) })
+          : "")
       : "Pronto";
   /** Row selection for tables whose rows carry a crawled `url`: opens the detail panel. */
   const selectByUrl = {
@@ -485,7 +488,7 @@ export default function App() {
         </div>
         <form onSubmit={start}>
           <label htmlFor="start-url" className="visually-hidden">
-            URL di partenza
+            {tr("URL di partenza")}
           </label>
           <input
             id="start-url"
@@ -493,7 +496,7 @@ export default function App() {
             required
             value={url}
             onChange={(e) => setUrl(e.currentTarget.value)}
-            placeholder="https://esempio.it"
+            placeholder={tr("https://esempio.it")}
             disabled={running}
           />
           {running ? (
@@ -501,18 +504,28 @@ export default function App() {
               {stopped ? "Interruzione…" : "Stop"}
             </button>
           ) : (
-            <button type="submit">Avvia</button>
+            <button type="submit">{tr("Avvia")}</button>
           )}
         </form>
         <div className="file-actions">
+          <button
+            type="button"
+            className="ghost lang"
+            onClick={() => setLang(LANG === "it" ? "en" : "it")}
+            disabled={running}
+            title={tr("Lingua")}
+            aria-label={`${tr("Lingua")}: ${LANG === "it" ? "English" : "Italiano"}`}
+          >
+            {LANG === "it" ? "EN" : "IT"}
+          </button>
           <button type="button" className="ghost" onClick={() => setSettingsOpen(true)} disabled={running}>
-            Impostazioni
+            {tr("Impostazioni")}
           </button>
           <button type="button" className="ghost" onClick={() => openCrawl()} disabled={running}>
-            Apri…
+            {tr("Apri…")}
           </button>
           <button type="button" className="ghost" onClick={saveCrawlAs} disabled={running || !crawlPath}>
-            Salva come…
+            {tr("Salva come…")}
           </button>
         </div>
       </header>
@@ -541,27 +554,30 @@ export default function App() {
 
       {running ? (
         <section className="hero" aria-live="polite">
-          <h1>Scansione in corso…</h1>
-          <p className="big-number">{(progress?.done ?? 0).toLocaleString("it-IT")}</p>
+          <h1>{tr("Scansione in corso…")}</h1>
+          <p className="big-number">{(progress?.done ?? 0).toLocaleString(LOCALE)}</p>
           <p>
             {STAGE_LABEL[progress?.stage ?? "pages"]}
-            {progress && progress.pending > 0 && ` · ${progress.pending.toLocaleString("it-IT")} in coda`}
+            {progress && progress.pending > 0 && tr(" · {n} in coda", { n: progress.pending.toLocaleString(LOCALE) })}
           </p>
         </section>
       ) : pages.length === 0 ? (
         <section className="hero">
-          <h1>Scansiona un sito</h1>
-          <p>Inserisci un URL e premi Avvia. CyberFrog segue i link dello stesso dominio e rispetta robots.txt.</p>
+          <h1>{tr("Scansiona un sito")}</h1>
+          <p>{tr("Inserisci un URL e premi Avvia. CyberFrog segue i link dello stesso dominio e rispetta robots.txt.")}</p>
           {recent.length > 0 && (
             <div className="recent">
-              <h2>Crawl recenti</h2>
+              <h2>{tr("Crawl recenti")}</h2>
               <ul>
                 {recent.map((c) => (
                   <li key={c.path}>
                     <button type="button" onClick={() => openCrawl(c.path)}>
-                      <span className="recent-url">{c.start_url ?? "Crawl vuoto"}</span>
+                      <span className="recent-url">{c.start_url ?? tr("Crawl vuoto")}</span>
                       <span className="recent-meta">
-                        {c.pages.toLocaleString("it-IT")} URL · {when.format(new Date(c.modified_ms))}
+                        {tr("{n} URL · {date}", {
+                          n: c.pages.toLocaleString(LOCALE),
+                          date: when.format(new Date(c.modified_ms)),
+                        })}
                       </span>
                     </button>
                   </li>
@@ -574,22 +590,22 @@ export default function App() {
         <>
           <div className="stats" role="status">
             <Stat label="URL" value={pages.length} />
-            <Stat label="Indicizzabili" value={indexable} kind="ok" />
+            <Stat label={tr("Indicizzabili")} value={indexable} kind="ok" />
             <Stat label="2xx" value={counts.ok} kind="ok" />
             <Stat label="3xx" value={counts.redirect} kind="redirect" />
             <Stat label="4xx" value={counts.client} kind="client" />
             <Stat label="5xx" value={counts.server} kind="server" />
-            <Stat label="Bloccati" value={counts.blocked} kind="blocked" />
-            <Stat label="Link rotti" value={broken.length} kind={broken.length ? "client" : undefined} />
+            <Stat label={tr("Bloccati")} value={counts.blocked} kind="blocked" />
+            <Stat label={tr("Link rotti")} value={broken.length} kind={broken.length ? "client" : undefined} />
             {median !== null && (
               <span className="stat">
-                <strong>{median.toLocaleString("it-IT")} ms</strong> tempo mediano
+                <strong>{median.toLocaleString(LOCALE)} ms</strong> {tr("tempo mediano")}
               </span>
             )}
             {elapsed !== null && <span className="time">{fmt.format(elapsed)} s</span>}
           </div>
 
-          <nav className="tabs" role="tablist" aria-label="Report">
+          <nav className="tabs" role="tablist" aria-label={tr("Report")}>
             {TABS.map((t) => (
               <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => {
                   setTab(t.id);
@@ -691,7 +707,7 @@ export default function App() {
                 exportName={`${host}-sitemap`}
                 actions={
                   <button type="button" className="secondary" onClick={saveSitemap}>
-                    Genera sitemap XML
+                    {tr("Genera sitemap XML")}
                   </button>
                 }
                 {...selectByUrl}
@@ -778,7 +794,7 @@ export default function App() {
       <footer className="statusbar">
         <span role="status">{statusText}</span>
         <button type="button" className="powered" onClick={() => openUrl("https://cyberzec.it")}>
-          Powered by
+          {tr("Powered by")}
           <img src={cyberzecShield} alt="" width={18} height={18} />
           <strong>Daniele Zecca – CyberZec</strong>
         </button>
@@ -790,7 +806,7 @@ export default function App() {
 function Stat({ label, value, kind }: { label: string; value: number; kind?: string }) {
   return (
     <span className={`stat ${kind ?? ""}`}>
-      <strong>{value.toLocaleString("it-IT")}</strong> {label}
+      <strong>{value.toLocaleString(LOCALE)}</strong> {label}
     </span>
   );
 }

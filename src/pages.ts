@@ -19,6 +19,8 @@ export type Page = {
   outlinks: number;
   external_outlinks: number;
   in_sitemap: boolean;
+  response_ms: number | null;
+  size_bytes: number | null;
 };
 
 /** Mirrors `report::ExternalLink`, `BrokenLink`, `LinkRow` and `PageLinks` in src-tauri/src/report.rs. */
@@ -286,4 +288,24 @@ export function buildSitemapXml(pages: Page[]): string {
     "</urlset>",
     "",
   ].join("\n");
+}
+
+export const SLOW_MS = 1000;
+export const VERY_SLOW_MS = 3000;
+/** HTML this large slows parsing and rendering; most pages stay well under it. */
+export const HEAVY_PAGE_BYTES = 512 * 1024;
+
+export const PERF_FILTERS: FilterDef<Page>[] = [
+  { id: "all", label: "Tutti", test: () => true },
+  { id: "slow", label: "Risposta oltre 1 s", test: (p) => (p.response_ms ?? 0) > SLOW_MS },
+  { id: "very-slow", label: "Risposta oltre 3 s", test: (p) => (p.response_ms ?? 0) > VERY_SLOW_MS },
+  { id: "heavy", label: "HTML oltre 512 KB", test: (p) => isHtmlPage(p) && (p.size_bytes ?? 0) > HEAVY_PAGE_BYTES },
+];
+
+/** Median response time of pages that answered, or null when none did. */
+export function medianMs(pages: Page[]): number | null {
+  const times = pages.map((p) => p.response_ms).filter((t): t is number => t !== null).sort((a, b) => a - b);
+  if (times.length === 0) return null;
+  const mid = times.length >> 1;
+  return times.length % 2 ? times[mid] : Math.round((times[mid - 1] + times[mid]) / 2);
 }

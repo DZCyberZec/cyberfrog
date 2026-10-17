@@ -4,7 +4,7 @@ use std::collections::{HashSet, VecDeque};
 use std::error::Error;
 use std::path::Path;
 use std::sync::LazyLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use regex::Regex;
 use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE, LOCATION};
@@ -77,6 +77,8 @@ struct Fetched {
     content_type: Option<String>,
     /// All X-Robots-Tag header values, comma-joined.
     x_robots_tag: Option<String>,
+    response_ms: Option<u32>,
+    size_bytes: Option<i64>,
     redirect_to: Option<Url>,
     /// `None` unless the response was HTML and its body was read.
     html: Option<HtmlData>,
@@ -138,6 +140,10 @@ pub struct Page {
     pub external_outlinks: u32,
     /// Listed in one of the site's XML sitemaps.
     pub in_sitemap: bool,
+    /// From sending the request to the end of the body (or the headers, for bodies not read).
+    pub response_ms: Option<u32>,
+    /// Body size: bytes read for HTML, Content-Length for the rest.
+    pub size_bytes: Option<i64>,
 }
 
 /// Crawl progress within a stage: items finished, and items waiting or in flight.
@@ -170,12 +176,22 @@ pub(crate) fn open_existing(path: &Path) -> rusqlite::Result<Connection> {
 /// All pages, in crawl order.
 pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
     let db = open_existing(path)?;
-    // crawls saved before X-Robots-Tag was recorded lack the column; read them as "no header"
-    let x_robots = if db.prepare("SELECT x_robots_tag FROM pages LIMIT 0").is_ok() {
-        "x_robots_tag"
-    } else {
-        "NULL"
+    // columns added after the first release are read as NULL from crawls saved before them
+    let newer = |column: &'static str| {
+        if db
+            .prepare(&format!("SELECT {column} FROM pages LIMIT 0"))
+            .is_ok()
+        {
+            column
+        } else {
+            "NULL"
+        }
     };
+    let (x_robots, response_ms, size_bytes) = (
+        newer("x_robots_tag"),
+        newer("response_ms"),
+        newer("size_bytes"),
+    );
     // crawls saved before external links were stored count every link as same-site
     let (outlinks, external) = if db.prepare("SELECT external FROM links LIMIT 0").is_ok() {
         (
@@ -193,7 +209,8 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
     let mut stmt = db.prepare(&format!(
         "SELECT url, depth, status, content_type, redirect_to, blocked_by_robots, error,
                 title, meta_description, h1, canonical, meta_robots, word_count,
-                (SELECT count(*) FROM links WHERE target = pages.url), {x_robots}, {outlinks}, {external}, {in_sitemap}
+                (SELECT count(*) FROM links WHERE target = pages.url), {x_robots}, {outlinks}, {external}, {in_sitemap},
+                {response_ms}, {size_bytes}
          FROM pages ORDER BY rowid"
     ))?;
     stmt.query_map([], |r| {
@@ -216,6 +233,8 @@ pub fn read_pages(path: &Path) -> rusqlite::Result<Vec<Page>> {
             outlinks: r.get(15)?,
             external_outlinks: r.get(16)?,
             in_sitemap: r.get(17)?,
+            response_ms: r.get(18)?,
+            size_bytes: r.get(19)?,
         })
     })?
     .collect()
@@ -239,7 +258,9 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
              canonical         TEXT,
              meta_robots       TEXT,
              word_count        INTEGER,
-             x_robots_tag      TEXT
+             x_robots_tag      TEXT,
+             response_ms       INTEGER,
+             size_bytes        INTEGER
          );
          CREATE TABLE IF NOT EXISTS links (
              source   TEXT NOT NULL,
@@ -396,8 +417,9 @@ pub async fn crawl(
         let tx = db.transaction()?;
         tx.execute(
             "INSERT OR IGNORE INTO pages (url, depth, status, content_type, redirect_to, error,
-                 title, meta_description, h1, canonical, meta_robots, word_count, x_robots_tag)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                 title, meta_description, h1, canonical, meta_robots, word_count, x_robots_tag,
+                 response_ms, size_bytes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 page.url.as_str(),
                 page.depth,
@@ -412,6 +434,8 @@ pub async fn crawl(
                 html.meta_robots,
                 is_html.then_some(html.word_count),
                 page.x_robots_tag,
+                page.response_ms,
+                page.size_bytes,
             ],
         )?;
         {
@@ -768,10 +792,14 @@ async fn fetch(client: Client, url: Url, depth: Depth) -> Fetched {
         status: None,
         content_type: None,
         x_robots_tag: None,
+        response_ms: None,
+        size_bytes: None,
         redirect_to: None,
         html: None,
         error: None,
     };
+    let t0 = Instant::now();
+    let elapsed = || Some(t0.elapsed().as_millis().min(u32::MAX as u128) as u32);
     let resp = match client.get(page.url.clone()).send().await {
         Ok(resp) => resp,
         Err(e) => {
@@ -788,6 +816,8 @@ async fn fetch(client: Client, url: Url, depth: Depth) -> Fetched {
         .filter_map(|v| v.to_str().ok())
         .collect();
     page.x_robots_tag = (!x_robots.is_empty()).then(|| x_robots.join(", "));
+    page.response_ms = elapsed();
+    page.size_bytes = header(&resp, CONTENT_LENGTH).and_then(|l| l.parse().ok());
     if resp.status().is_redirection() {
         page.redirect_to = header(&resp, LOCATION).and_then(|l| page.url.join(&l).ok());
         return page;
@@ -798,7 +828,11 @@ async fn fetch(client: Client, url: Url, depth: Depth) -> Fetched {
         .is_some_and(|c| c.starts_with("text/html"))
     {
         match resp.text().await {
-            Ok(body) => page.html = Some(parse_html(&page.url, &body)),
+            Ok(body) => {
+                page.response_ms = elapsed();
+                page.size_bytes = Some(body.len() as i64);
+                page.html = Some(parse_html(&page.url, &body));
+            }
             Err(e) => page.error = Some(e.to_string()),
         }
     }
@@ -1052,6 +1086,15 @@ mod tests {
             Some("noindex, googlebot: nofollow")
         );
         assert_eq!(x_robots("/a"), None);
+        let new = pages.iter().find(|pg| pg.url == u("/new")).unwrap();
+        assert_eq!(new.size_bytes, Some("<p>no links</p>".len() as i64));
+        assert!(new.response_ms.is_some());
+        let old = pages.iter().find(|pg| pg.url == u("/old")).unwrap();
+        assert_eq!(
+            old.size_bytes,
+            Some(0),
+            "redirects: Content-Length of the empty body"
+        );
 
         // crawls saved before the X-Robots-Tag column existed still open
         Connection::open(&path)

@@ -13,7 +13,10 @@ import {
   IMAGE_FILTERS,
   LARGE_IMAGE_BYTES,
   SITEMAP_FILTERS,
+  PERF_FILTERS,
+  SLOW_MS,
   buildSitemapXml,
+  medianMs,
   codeLabel,
   formatBytes,
   kindOf,
@@ -34,6 +37,7 @@ import {
 import "./App.css";
 
 const num = (v: number | null) => <span className="num">{v ?? ""}</span>;
+const ms = (v: number | null) => <span className={`num${(v ?? 0) > SLOW_MS ? " heavy" : ""}`}>{v ?? ""}</span>;
 
 const page = helperFor<Page>();
 const statusColumn = page.accessor(statusLabel, {
@@ -69,8 +73,18 @@ const internalColumns = page.columns([
   page.accessor("inlinks", { header: "Inlink", size: 75, cell: (c) => num(c.getValue()) }),
   page.accessor("outlinks", { header: "Outlink", size: 85, cell: (c) => num(c.getValue()) }),
   page.accessor("external_outlinks", { header: "Outlink esterni", size: 125, cell: (c) => num(c.getValue()) }),
+  page.accessor("response_ms", { header: "Tempo (ms)", size: 100, cell: (c) => ms(c.getValue()) }),
+  page.accessor("size_bytes", { header: "Peso", size: 90, cell: (c) => <span className="num">{formatBytes(c.getValue())}</span> }),
   page.accessor("content_type", { header: "Content type", size: 180 }),
   page.accessor("redirect_to", { header: "Redirect a", size: 300 }),
+]);
+const perfColumns = page.columns([
+  page.accessor("url", { header: "URL", size: 460 }),
+  statusColumn,
+  page.accessor("response_ms", { header: "Tempo (ms)", size: 110, cell: (c) => ms(c.getValue()) }),
+  page.accessor("size_bytes", { header: "Peso", size: 100, cell: (c) => <span className="num">{formatBytes(c.getValue())}</span> }),
+  page.accessor("content_type", { header: "Content type", size: 200 }),
+  page.accessor("word_count", { header: "Parole", size: 80, cell: (c) => num(c.getValue()) }),
 ]);
 const codeColumns = page.columns([
   page.accessor("url", { header: "URL", size: 460 }),
@@ -167,7 +181,7 @@ const metaTabs = CHECKS.map((check) => ({
   ]),
 }));
 
-type Tab = "internal" | "codes" | "index" | "external" | "broken" | "images" | "sitemap" | Check["field"];
+type Tab = "internal" | "codes" | "index" | "external" | "broken" | "images" | "sitemap" | "perf" | Check["field"];
 const TABS: { id: Tab; label: string }[] = [
   { id: "internal", label: "Interni" },
   { id: "codes", label: "Codici di risposta" },
@@ -176,6 +190,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "broken", label: "Link rotti" },
   { id: "images", label: "Immagini" },
   { id: "sitemap", label: "Sitemap" },
+  { id: "perf", label: "Prestazioni" },
   ...CHECKS.map((c) => ({ id: c.field, label: c.label })),
 ];
 
@@ -303,6 +318,7 @@ export default function App() {
     return c;
   }, [pages]);
 
+  const median = useMemo(() => medianMs(pages), [pages]);
   const indexable = useMemo(() => pages.filter((p) => nonIndexableReason(p) === null).length, [pages]);
   const indexTabFilters = useMemo(() => indexFilters(pages), [pages]);
   const metaTab = metaTabs.find((t) => t.check.field === tab);
@@ -415,6 +431,11 @@ export default function App() {
             <Stat label="5xx" value={counts.server} kind="server" />
             <Stat label="Bloccati" value={counts.blocked} kind="blocked" />
             <Stat label="Link rotti" value={broken.length} kind={broken.length ? "client" : undefined} />
+            {median !== null && (
+              <span className="stat">
+                <strong>{median.toLocaleString("it-IT")} ms</strong> tempo mediano
+              </span>
+            )}
             {elapsed !== null && <span className="time">{fmt.format(elapsed)} s</span>}
           </div>
 
@@ -499,6 +520,16 @@ export default function App() {
                     Genera sitemap XML
                   </button>
                 }
+                {...selectByUrl}
+              />
+            )}
+            {tab === "perf" && (
+              <DataTable
+                key="perf"
+                data={pages}
+                columns={perfColumns}
+                filters={PERF_FILTERS}
+                exportName={`${host}-prestazioni`}
                 {...selectByUrl}
               />
             )}

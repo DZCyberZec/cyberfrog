@@ -1,13 +1,13 @@
 // Self-check for filters and CSV export. Run: node scripts/pages.check.ts
 import assert from "node:assert/strict";
 import {
-  BROKEN_FILTERS, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
+  BROKEN_FILTERS, PERF_FILTERS, medianMs, SITEMAP_FILTERS, buildSitemapXml, CHECKS, CODE_FILTERS, IMAGE_FILTERS, formatBytes, directives, indexFilters, metaFilters, metaRows, nonIndexableReason, toCsv, type Page,
 } from "../src/pages.ts";
 
 const base: Page = {
   url: "", depth: 0, status: 200, content_type: "text/html", redirect_to: null, blocked_by_robots: false,
   error: null, title: null, meta_description: null, h1: null, canonical: null, meta_robots: null,
-  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0, in_sitemap: false,
+  word_count: 0, inlinks: 0, x_robots_tag: null, outlinks: 0, external_outlinks: 0, in_sitemap: false, response_ms: null, size_bytes: null,
 };
 const pages: Page[] = [
   { ...base, url: "/a", title: "Same title for both pages here!" },
@@ -113,4 +113,16 @@ const xml = buildSitemapXml(sm);
 assert.ok(xml.includes("<loc>https://s.it/q?a=1&amp;b=&lt;2&gt;</loc>"), xml);
 assert.ok(!xml.includes("/noidx") && !xml.includes("/old"), "only indexable 200 HTML pages");
 assert.equal((xml.match(/<url>/g) ?? []).length, 5);
+const perf: Page[] = [
+  { ...base, url: "/fast", response_ms: 120, size_bytes: 40_000 },
+  { ...base, url: "/slow", response_ms: 1500, size_bytes: 600_000 },
+  { ...base, url: "/crawl", response_ms: 3001 },
+  { ...base, url: "/pdf", content_type: "application/pdf", size_bytes: 9_000_000, response_ms: 900 },
+  { ...base, url: "/down", status: null },
+];
+assert.deepEqual(pick(perf, PERF_FILTERS, "slow"), ["/slow", "/crawl"]);
+assert.deepEqual(pick(perf, PERF_FILTERS, "very-slow"), ["/crawl"]);
+assert.deepEqual(pick(perf, PERF_FILTERS, "heavy"), ["/slow"], "only HTML pages count as heavy");
+assert.equal(medianMs(perf), 1200);
+assert.equal(medianMs([]), null);
 console.log("pages.check: ok");

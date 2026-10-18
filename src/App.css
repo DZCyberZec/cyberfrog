@@ -390,6 +390,33 @@ dialog.settings .steps li { padding: 1px 0; }
 .topic-list small, .topic-list .link { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .topic-list small { color: var(--muted); }
 
+/* AI visibility tracker */
+.tracker { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px 24px 28px; }
+.tracker > * { max-width: 1200px; width: 100%; }
+.tracker-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.tracker-head h2 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+.tracker-head p { margin: 4px 0 0; max-width: 720px; }
+.tracker-score { display: flex; flex-direction: column; align-items: flex-end; flex: none; }
+.tracker-score strong { font-size: 28px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.tracker textarea { width: 100%; padding: 8px 10px; font: inherit; color: var(--text); background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; }
+.tracker textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tracker-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.tracker-actions .spacer { flex: 1; }
+.tracker .go { padding: 6px 16px; font-weight: 600; color: var(--accent-text); background: var(--accent); border: 0; border-radius: var(--radius); cursor: pointer; }
+.tracker .go:disabled { opacity: 0.5; cursor: default; }
+.tracker button.secondary { padding: 6px 12px; font-weight: 600; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); cursor: pointer; }
+.instead { margin: 0; padding: 0; list-style: none; }
+.instead li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
+.tracker-table td { text-align: left !important; white-space: normal !important; }
+.tracker-table th { text-align: left !important; }
+.tracker-table tr.clickable { cursor: pointer; }
+.tracker-table tr.clickable:hover td { background: var(--sunken); }
+.tracker-table .sources { color: var(--muted); font-size: 12px; }
+.trend { white-space: nowrap !important; }
+.trend i { display: inline-block; width: 9px; height: 9px; margin-right: 3px; border-radius: 50%; background: var(--client); }
+.trend i.yes { background: var(--ok); }
+.tracker-answer { margin-top: 10px; }
+
 /* Filters + export */
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .filters button {

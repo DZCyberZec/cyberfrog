@@ -20,6 +20,7 @@ export type Tab =
   | "sitemap"
   | "perf"
   | "geo"
+  | "tracker"
   | "topics"
   | "js"
   | "hreflang"
@@ -52,7 +53,10 @@ export const GROUPS: { label: string; items: { id: Tab; label: string }[] }[] = 
   },
   {
     label: tr("AI e GEO"),
-    items: [{ id: "geo", label: tr("Visibilità nelle AI") }],
+    items: [
+      { id: "geo", label: tr("Visibilità nelle AI") },
+      { id: "tracker", label: tr("Tracker AI") },
+    ],
   },
   {
     label: tr("Contenuti"),

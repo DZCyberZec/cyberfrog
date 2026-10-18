@@ -6,6 +6,7 @@ import { ImagePanel } from "./ImagePanel";
 import { GeoReport } from "./GeoReport";
 import { TopicsReport } from "./TopicsReport";
 import { CompetitorReport } from "./CompetitorReport";
+import { TrackerReport } from "./TrackerReport";
 import { SiteStructure } from "./SiteStructure";
 import { Overview } from "./Overview";
 import { HelpButton } from "./HelpButton";
@@ -141,6 +142,16 @@ export function Reports(p: Props) {
       ]),
     };
   }, [pages, crawl]);
+  // the hubs of the biggest topics, titled the way people search for them
+  const trackerSuggestions = useMemo(() => {
+    const byUrl = new Map(pages.map((pg) => [pg.url, pg]));
+    const titles = crawl.topics.clusters
+      .slice(0, 5)
+      .map((c) => byUrl.get(c.hub))
+      .map((pg) => (pg?.h1 ?? pg?.title ?? "").split(/\s[|–-]\s/)[0].trim())
+      .filter((t) => t.length > 3);
+    return [...new Set(titles)];
+  }, [pages, crawl.topics]);
   const selectedPage = useMemo(() => pages.find((pg) => pg.url === selected), [pages, selected]);
   const selectedIssues = useMemo(
     () => (selected ? pageIssues(selected, a.snapshot, a.dupRows) : []),
@@ -332,6 +343,9 @@ export function Reports(p: Props) {
           }}
         />
       )}
+      {tab === "tracker" && (
+        <TrackerReport host={a.host} engine={p.settings.ai_engine} aiReady={p.aiReady} suggestions={trackerSuggestions} />
+      )}
       {tab === "topics" && (
         <TopicsReport key={k("topics")} initialFilter={initial("topics")} topics={crawl.topics} exportName={name("argomenti")} selected={selected} select={select} />
       )}
@@ -374,7 +388,7 @@ export function Reports(p: Props) {
           }}
         />
       )}
-      {tab !== "images" && tab !== "overview" && tab !== "competitor" && selected && path && (
+      {tab !== "images" && tab !== "overview" && tab !== "competitor" && tab !== "tracker" && selected && path && (
         <DetailPanel
           crawlPath={path}
           url={selected}

@@ -15,6 +15,7 @@ const { healthScore } = await import("../src/health.ts");
 const { TOPIC_FILTERS, topicFindings, REASON_LABEL } = await import("../src/topics.ts");
 const { summarize, metricRows, competitorActions } = await import("../src/competitor.ts");
 const { buildClientReport, esc } = await import("../src/clientReport.ts");
+const { evaluate, addRuns, citedInstead, visibility, parseQueries, sameSite } = await import("../src/tracker.ts");
 const { buildLlmsTxt } = await import("../src/llms.ts");
 const { HELP } = await import("../src/help.ts");
 const { EMPTY_GEO, geoFilters, geoRows, botState, CITABILITY, PURPOSE_LABEL } = await import("../src/geo.ts");
@@ -456,4 +457,13 @@ for (const [id, h] of Object.entries(HELP)) {
   for (const text of [h.what, h.read, h.act]) assert.ok(hasTranslation(text), `English for help.${id}: ${text.slice(0, 40)}`);
 }
 for (const t of ["Come funziona", "Cosa mostra", "Come leggerlo", "Cosa fare", "Chiudi la guida"]) assert.ok(hasTranslation(t), t);
+assert.ok(sameSite("www.cyberzec.it", "cyberzec.it") && sameSite("blog.cyberzec.it", "cyberzec.it") && !sameSite("notcyberzec.it", "cyberzec.it"));
+const r1 = evaluate("cyberzec.it", { answer: "x", cited: ["https://bit-lab.it/", "https://www.cyberzec.it/servizi/", "https://cyberzec.it/chi-sono/"], results: [] }, "q1", "codex", 2);
+assert.deepEqual([r1.position, r1.found, r1.sources], [2, true, ["bit-lab.it", "cyberzec.it"]], "subpages of the site count once, www is ignored");
+const r0 = evaluate("cyberzec.it", { answer: "y", cited: ["https://other.it/"], results: ["https://cyberzec.it/"] }, "q2", "codex", 1);
+assert.deepEqual([r0.position, r0.found], [null, true], "found by the search but not cited");
+const ts = addRuns({ queries: ["q1", "q2"], runs: [] }, [r1, r0]);
+assert.equal(visibility(ts), 0.5);
+assert.deepEqual(citedInstead(ts, "cyberzec.it"), [{ host: "bit-lab.it", answers: 1 }, { host: "other.it", answers: 1 }]);
+assert.deepEqual(parseQueries(" a \n\nb\na\n"), ["a", "b"]);
 console.log("pages.check: ok");

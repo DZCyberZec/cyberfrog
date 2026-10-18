@@ -6,6 +6,7 @@ mod api;
 mod claude_code;
 mod codex;
 pub mod keychain;
+pub mod login;
 
 #[derive(serde::Serialize)]
 pub struct Status {

@@ -252,6 +252,34 @@ async fn ai_status() -> ai::Status {
 }
 
 /// Stores the API key in the Keychain; an empty key removes it.
+/// Starts signing in a CLI: Claude Code returns at once and waits for the code; Codex returns
+/// when the browser sign-in is done.
+#[tauri::command]
+async fn ai_login(engine: String) -> Result<ai::login::Started, String> {
+    match engine.as_str() {
+        "claude-code" => ai::login::start_claude().await,
+        "codex" => {
+            ai::login::codex().await?;
+            Ok(ai::login::Started {
+                url: None,
+                needs_code: false,
+            })
+        }
+        _ => Err("Motore AI sconosciuto".into()),
+    }
+}
+
+/// Completes a Claude Code sign-in with the code Anthropic showed.
+#[tauri::command]
+async fn ai_login_code(code: String) -> Result<bool, String> {
+    ai::login::finish_claude(&code).await
+}
+
+#[tauri::command]
+fn ai_login_cancel() {
+    ai::login::cancel()
+}
+
 #[tauri::command]
 fn ai_set_key(key: String) -> Result<(), String> {
     ai::keychain::set_key(&key)
@@ -455,6 +483,9 @@ pub fn run() {
             add_schedule,
             remove_schedule,
             ai_status,
+            ai_login,
+            ai_login_code,
+            ai_login_cancel,
             ai_set_key,
             ai_complete,
             write_text_file,

@@ -325,6 +325,8 @@ dialog.settings .engine.chosen { border-color: var(--accent); background: var(--
 dialog.settings .engine-label { flex: 1; }
 dialog.settings .steps { margin: 6px 0 2px; padding-left: 26px; color: var(--muted); }
 dialog.settings .steps li { padding: 1px 0; }
+dialog.settings .cli-login { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 6px 0 2px 26px; }
+dialog.settings .cli-login .key-row { align-self: stretch; }
 
 /* GEO report: site cards above the page table */
 .geo { flex: 1; min-height: 0; display: flex; flex-direction: column; }

@@ -106,4 +106,3 @@ mod tests {
         assert!(!plain("a b") && !plain("x;y") && !plain(""));
     }
 }
-

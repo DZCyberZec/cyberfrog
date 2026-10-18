@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { LOCALE, tr, trError } from "./i18n";
 import { systemPrompt } from "./ai";
 import type { AiEngine } from "./settings";
+import { CliLogin } from "./CliLogin";
 
 /** Mirrors `ai::Status` in src-tauri/src/ai/mod.rs. */
 export type AiStatus = {
@@ -35,23 +36,13 @@ export function AiSettings({ engine, onEngine, status, onRefresh }: Props) {
       id: "claude-code",
       label: tr("Claude Code (abbonamento Claude, nessun costo API)"),
       state: status.claude_code_ready ? "ready" : status.claude_code ? "login" : "missing",
-      steps: [
-        tr("Installa Claude Code da claude.com/code."),
-        tr("Apri il Terminale ed esegui: claude"),
-        tr("Scrivi /login e accedi con il tuo account Claude."),
-        tr("Torna qui e premi Verifica connessione."),
-      ],
+      steps: [tr("Installa Claude Code da claude.com/code."), tr("Riapri le Impostazioni e premi Accedi a Claude.")],
     },
     {
       id: "codex",
       label: tr("Codex (abbonamento ChatGPT, nessun costo API)"),
       state: status.codex_ready ? "ready" : status.codex ? "login" : "missing",
-      steps: [
-        tr("Installa l'app ChatGPT per Mac (include Codex) oppure la CLI Codex."),
-        tr("Apri il Terminale ed esegui: codex login"),
-        tr("Accedi con il tuo account ChatGPT."),
-        tr("Torna qui e premi Verifica connessione."),
-      ],
+      steps: [tr("Installa l'app ChatGPT per Mac (include Codex) oppure la CLI Codex."), tr("Riapri le Impostazioni e premi Accedi a Codex.")],
     },
     {
       id: "api",
@@ -101,7 +92,10 @@ export function AiSettings({ engine, onEngine, status, onRefresh }: Props) {
             <span className="engine-label">{e.label}</span>
             <span className={`badge ${STATE_BADGE[e.state]}`}>{STATE_LABEL[e.state]}</span>
           </label>
-          {engine === e.id && e.state !== "ready" && (
+          {engine === e.id && e.state === "login" && (e.id === "claude-code" || e.id === "codex") && (
+            <CliLogin engine={e.id} onDone={onRefresh} />
+          )}
+          {engine === e.id && (e.state === "missing" || (e.state === "login" && e.id === "api")) && (
             <ol className="steps">
               {e.steps.map((s) => (
                 <li key={s}>{s}</li>

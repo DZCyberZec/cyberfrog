@@ -587,3 +587,28 @@ dialog.settings button.add-rule { align-self: flex-start; text-align: left; }
 .help-pop p { margin: 0 0 4px; }
 .help-pop .close { width: 28px; height: 28px; color: var(--muted); background: none; border: 0; border-radius: var(--radius); cursor: pointer; }
 .help-pop .close:hover { color: var(--text); background: var(--sunken); }
+
+/* Search Console */
+.gsc { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px 24px 28px; }
+.gsc > * { flex: none; max-width: 1200px; width: 100%; }
+.gsc-connect h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: -0.01em; }
+.gsc-connect p { margin: 0 0 12px; }
+.gsc-actions, .gsc-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gsc-actions { justify-content: flex-start; }
+.gsc-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.gsc-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.gsc-form select, .gsc-form input { padding: 6px 8px; font: inherit; font-weight: 400; color: var(--text); background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius); }
+.gsc-form select { min-width: 260px; max-width: 100%; }
+.gsc .go { padding: 6px 16px; font-weight: 600; color: var(--accent-text); background: var(--accent); border: 0; border-radius: var(--radius); cursor: pointer; }
+.gsc .go:disabled { opacity: 0.5; cursor: default; }
+.gsc button.secondary { padding: 6px 12px; font-weight: 600; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); cursor: pointer; }
+.gsc button.secondary:disabled { opacity: 0.5; cursor: default; }
+.gsc .error { margin: 10px 0 0; }
+.gsc-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.gsc-summary .comp-card { display: flex; flex-direction: column; gap: 2px; }
+.gsc-summary strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+.gsc-table { display: flex; flex-direction: column; height: max(420px, 60vh); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+dialog.settings details summary { cursor: pointer; color: var(--muted); }
+dialog.settings .gsc-advanced { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+dialog.settings .key-row .spacer { flex: 1; }
+dialog.settings .engine-label .badge { margin-left: 8px; }

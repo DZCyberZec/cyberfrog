@@ -5,6 +5,7 @@ import { CHECKS, type Check, type Issue } from "./pages";
 export type Tab =
   | "overview"
   | "competitor"
+  | "gsc"
   | "issues"
   | "compare"
   | "internal"
@@ -36,6 +37,7 @@ export const GROUPS: { label: string; items: { id: Tab; label: string }[] }[] = 
       { id: "issues", label: tr("Problemi") },
       { id: "compare", label: tr("Confronto") },
       { id: "competitor", label: tr("Competitor") },
+      { id: "gsc", label: tr("Search Console") },
     ],
   },
   {

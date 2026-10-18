@@ -371,6 +371,8 @@ export default function App() {
             aiReady={isAiReady(settings.ai_engine, aiStatus)}
             onSaveSitemap={saveSitemap}
             onSaveLlms={saveLlms}
+            onOpenSettings={() => setDialog("settings")}
+            settingsOpen={dialog === "settings"}
           />
         </div>
       )}

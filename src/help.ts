@@ -23,6 +23,11 @@ export const HELP: Record<string, { what: string; read: string; act: string }> =
     read: tr("Inserisci l'URL del competitor (o scegli un crawl già fatto): viene analizzato con le tue impostazioni. Nella tabella è evidenziato chi è avanti su ogni indicatore. Le azioni sono ordinate per priorità e divise in SEO, GEO e Contenuti."),
     act: tr("Parti dalle azioni Alta. Per ogni argomento che il competitor copre e tu no, crea una pagina; dove lui scrive molto di più su un tema comune, approfondisci. «Piano AI» ne ricava un piano a fasi."),
   },
+  gsc: {
+    what: tr("I dati reali di Google Search Console (clic, impressioni, CTR e posizione di ogni pagina) uniti a quelli del crawl, per vedere dove perdi traffico."),
+    read: tr("Scegli la proprietà e il periodo (predefinito: ultimi 28 giorni, fino a 3 giorni fa) e premi Carica dati. «CTR basso»: almeno 100 impressioni e CTR sotto metà di quello tipico per la posizione. «Quasi in prima pagina»: posizione tra 4 e 20 con almeno 50 impressioni. «Non trovate dal crawl»: hanno traffico ma nessun link le raggiunge. «Senza impressioni»: pagine indicizzabili del crawl che Google non mostra. «Query in cannibalizzazione»: query per cui due o più pagine hanno almeno 10 impressioni."),
+    act: tr("Riscrivi title e meta delle pagine con CTR basso (il pulsante AI ne propone di nuovi). Rafforza con contenuti e link interni quelle quasi in prima pagina. Collega le pagine non trovate dal crawl o rimuovile. Per le query in cannibalizzazione scegli una pagina e unisci o differenzia le altre."),
+  },
   internal: {
     what: tr("Tutti gli URL del sito trovati dal crawl, con i dati principali di ciascuno: stato, indicizzabilità, title, meta description, H1, canonical, parole, link e tempi."),
     read: tr("Ogni riga è un URL; scorri a destra per le colonne. Profondità = clic dalla pagina iniziale. Inlink = link interni che la puntano. Link Score = importanza interna da 0 a 100. Clic sulla riga per il dettaglio."),

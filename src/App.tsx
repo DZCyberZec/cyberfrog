@@ -15,7 +15,7 @@ import { Reports, type Jump } from "./Reports";
 import { RunningScreen, StartScreen } from "./StartScreen";
 import { Sidebar } from "./Sidebar";
 import { GearIcon, MoreIcon, SearchIcon } from "./icons";
-import { isAiReady, type AiStatus } from "./AiSettings";
+import { NO_AI, isAiReady, type AiStatus } from "./AiSettings";
 import { loadSettings, saveSettings, type Settings } from "./settings";
 import { EMPTY_CRAWL, STAGE_LABEL, hostOf, type CrawlData, type CrawlSummary, type Progress } from "./crawl";
 import { useAnalysis } from "./useAnalysis";
@@ -62,14 +62,14 @@ export default function App() {
   const [mode, setMode] = useState<Mode>("spider");
   const [listText, setListText] = useState("");
   const [dialog, setDialog] = useState<"settings" | "list" | "schedules" | "palette" | null>(null);
-  const [aiStatus, setAiStatus] = useState<AiStatus>({ has_key: false, claude_code: null });
+  const [aiStatus, setAiStatus] = useState<AiStatus>(NO_AI);
   const listCount = countUrls(listText);
   const hasCrawl = crawl.pages.length > 0;
   // duplicates compare every pair of pages, so only where they're shown
   const a = useAnalysis(crawl, tab === "duplicates" || tab === "issues");
 
   const refreshAi = useCallback(() => {
-    invoke<AiStatus>("ai_status").then(setAiStatus, () => setAiStatus({ has_key: false, claude_code: null }));
+    invoke<AiStatus>("ai_status").then(setAiStatus, () => setAiStatus(NO_AI));
   }, []);
   useEffect(refreshAi, [refreshAi]);
   const refreshRecent = useCallback(() => {

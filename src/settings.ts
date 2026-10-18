@@ -17,7 +17,7 @@ export type Settings = {
   ai_engine: AiEngine;
 };
 
-export type AiEngine = "claude-code" | "api";
+export type AiEngine = "claude-code" | "codex" | "api";
 
 /** Mirrors `RuleSpec` in src-tauri/src/lib.rs. */
 export type RuleSpec = {

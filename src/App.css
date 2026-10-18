@@ -319,6 +319,12 @@ dialog.palette .none { padding: 14px; color: var(--muted); text-align: center; }
 dialog.settings .key-row { display: flex; align-items: center; gap: 8px; }
 dialog.settings .key-row input { flex: 1; }
 dialog.settings small.error { color: var(--client); }
+dialog.settings .ok-text { color: var(--ok); }
+dialog.settings .engine { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+dialog.settings .engine.chosen { border-color: var(--accent); background: var(--accent-soft); }
+dialog.settings .engine-label { flex: 1; }
+dialog.settings .steps { margin: 6px 0 2px; padding-left: 26px; color: var(--muted); }
+dialog.settings .steps li { padding: 1px 0; }
 
 /* GEO report: site cards above the page table */
 .geo { flex: 1; min-height: 0; display: flex; flex-direction: column; }

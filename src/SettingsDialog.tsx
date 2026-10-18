@@ -32,11 +32,12 @@ export function SettingsDialog({ open, settings, onSave, onClose, aiStatus, onAi
     if (!dialog) return;
     if (open && !dialog.open) {
       setDraft(settings);
+      onAiStatusChange(); // a CLI login done meanwhile shows up at once
       dialog.showModal();
     } else if (!open && dialog.open) {
       dialog.close();
     }
-  }, [open, settings]);
+  }, [open, settings, onAiStatusChange]);
 
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
@@ -166,7 +167,7 @@ export function SettingsDialog({ open, settings, onSave, onClose, aiStatus, onAi
           engine={draft.ai_engine}
           onEngine={(e) => set("ai_engine", e)}
           status={aiStatus}
-          onKeyChange={onAiStatusChange}
+          onRefresh={onAiStatusChange}
         />
 
         <footer>

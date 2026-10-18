@@ -35,7 +35,12 @@
 - **Uncrawlable links**: links search engines may not follow (JavaScript navigation, `href` outside `<a>`) and invalid URLs.
 - **Link Score and site structure**: internal PageRank on a 0–100 scale for every URL, URLs per click depth, and the folder tree with URL counts, indexable pages and the strongest Link Score in each folder.
 - **JavaScript rendering** (optional): pages are also opened in a headless Chrome, Chromium, Brave or Edge already on your Mac. The JavaScript report shows content and links that exist only after rendering, and pages that failed to render.
-- **AI assistant**: Claude suggests titles and meta descriptions, explains a page's issues and writes a prioritised action plan for the whole crawl. It runs through your own [Claude Code](https://claude.com/code) (your Claude subscription, no API cost) or an Anthropic API key kept in the macOS Keychain. Page data is sent to Anthropic only when you ask.
+- **AI assistant**: suggests titles and meta descriptions, explains a page's issues and writes prioritised action plans. It runs through your own [Claude Code](https://claude.com/code) or Codex (your Claude or ChatGPT plan, no API cost), or an Anthropic API key kept in the macOS Keychain. Settings show whether each engine is connected and how to connect it. Page data is sent only when you ask.
+- **AI visibility tracker**: for the questions your customers ask, an AI with web search answers, and CyberFrog records whether it cites your site, in which position, and which sites it cites instead, with history over time.
+- **Competitor analysis**: crawl a competitor with your settings and compare 13 measures side by side, see the topics they cover and you don't (and the reverse), and get the steps to overtake them, plus an AI plan.
+- **Generators**: an `llms.txt` built from your topics and pages, and FAQPage structured data from a page's question headings.
+- **Client report**: one self-contained HTML report, branded and ready to print to PDF.
+- **Built-in help**: a "?" on every report explains what it shows, how to read it and what to do.
 - **List mode**: paste a list of URLs (a migration plan, a spreadsheet column) and CyberFrog checks only those, on any site, plus where they redirect.
 - **Scheduled crawls**: every day or every week at a set time, even with the app closed. A macOS notification tells you what changed since the previous run (new and removed pages, status changes, new errors).
 - **GEO – AI visibility**: how ready the site is for AI answer engines (ChatGPT, Claude, Perplexity, AI Overviews). [Screenshot](docs/screenshots/geo.jpg)
@@ -138,7 +143,7 @@ node scripts/pages.check.ts    # filters, issues and exports
 |---|---|
 | Desktop shell | [Tauri 2](https://tauri.app) |
 | Crawler | Rust: tokio, reqwest, scraper, texting_robots; optional headless Chromium for JavaScript |
-| AI assistant | Claude Code CLI (`claude -p`, no tools) or the Claude Messages API with a key in the macOS Keychain |
+| AI assistant | Claude Code (`claude -p`) or Codex (`codex exec`) CLIs, isolated from tools and the user's config, or the Claude Messages API with a key in the macOS Keychain |
 | Scheduled crawls | launchd agents running `cyberfrog --scheduled <id>` |
 | Storage | one SQLite file per crawl |
 | Interface | React + TypeScript, TanStack Table and Virtual |

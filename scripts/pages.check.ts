@@ -18,6 +18,7 @@ const { buildClientReport, esc } = await import("../src/clientReport.ts");
 const { evaluate, addRuns, citedInstead, visibility, parseQueries, sameSite } = await import("../src/tracker.ts");
 const { buildLlmsTxt } = await import("../src/llms.ts");
 const { HELP } = await import("../src/help.ts");
+const { urlKey, gscRows, GSC_FILTERS, queryCannibalization, gscSummary, defaultRange, matchProperty, ctrCandidates, ctrPrompt } = await import("../src/gsc.ts");
 const { EMPTY_GEO, geoFilters, geoRows, botState, CITABILITY, PURPOSE_LABEL } = await import("../src/geo.ts");
 
 const base: Page = {
@@ -466,4 +467,53 @@ const ts = addRuns({ queries: ["q1", "q2"], runs: [] }, [r1, r0]);
 assert.equal(visibility(ts), 0.5);
 assert.deepEqual(citedInstead(ts, "cyberzec.it"), [{ host: "bit-lab.it", answers: 1 }, { host: "other.it", answers: 1 }]);
 assert.deepEqual(parseQueries(" a \n\nb\na\n"), ["a", "b"]);
+// search console: join with the crawl, filters, cannibalization, range and property
+{
+  const g = (page: string, clicks: number, impressions: number, position: number) => ({ page, clicks, impressions, ctr: clicks / impressions, position });
+  const crawled: Page[] = [
+    { ...base, url: "https://x.it/a", title: "A" },
+    { ...base, url: "https://x.it/quiet", title: "Quiet" },
+    { ...base, url: "https://x.it/old", title: "Old", meta_robots: "noindex" },
+    { ...base, url: "https://x.it/logo.png", content_type: "image/png" },
+    { ...base, url: "https://x.it/gone", status: 404 },
+  ];
+  const data = { pages: [g("http://www.x.it/a/", 1, 200, 2), g("https://x.it/a", 3, 300, 4), g("https://x.it/old/", 5, 50, 8), g("https://x.it/orphan", 0, 80, 12), g("https://x.it/q", 1, 5, 30)], queries: [] };
+  assert.equal(urlKey("HTTP://www.X.it/a/?p=1#top"), "x.it/a?p=1");
+  assert.equal(urlKey("https://x.it/"), urlKey("http://www.x.it"));
+  const rows = gscRows(crawled, data);
+  const by = Object.fromEntries(rows.map((r) => [r.url, r]));
+  assert.equal(rows.length, 5, "a (merged), old, orphan, q, quiet; image and 404 stay out");
+  assert.deepEqual([by["https://x.it/a"].clicks, by["https://x.it/a"].impressions, by["https://x.it/a"].inCrawl, by["https://x.it/a"].title], [4, 500, true, "A"], "www/http/slash variants merge onto the crawled URL");
+  assert.equal(by["https://x.it/a"].position, 3.2, "position weighted by impressions");
+  assert.deepEqual([by["https://x.it/orphan"].inCrawl, by["https://x.it/orphan"].indexable, by["https://x.it/orphan"].title], [false, null, null]);
+  assert.equal(by["https://x.it/old"].indexable, false);
+  const ids = (id: string) => rows.filter(GSC_FILTERS.find((f) => f.id === id)!.test).map((r) => r.url).sort();
+  assert.deepEqual(ids("not-crawled"), ["https://x.it/orphan", "https://x.it/q"]);
+  assert.deepEqual(ids("no-impressions"), ["https://x.it/quiet"]);
+  assert.deepEqual(ids("non-indexable-traffic"), ["https://x.it/old"]);
+  assert.deepEqual(ids("striking"), ["https://x.it/old", "https://x.it/orphan"], "position 4-20 with 50+ impressions; a is at 3.2, q has too few");
+  assert.equal(ids("all").length, 5);
+  // low-ctr: 100+ impressions and ctr under half of the curve (pos 4 -> 0.07, so below 0.035)
+  const low = (position: number, impressions: number, clicks: number) => GSC_FILTERS.find((f) => f.id === "low-ctr")!.test({ ...by["https://x.it/a"], position, impressions, clicks, ctr: clicks / impressions });
+  assert.ok(low(4, 500, 10) && !low(4, 500, 20), "2% flagged at position 4, 4% fine");
+  assert.ok(low(1, 1000, 100) && !low(1, 1000, 200), "10% flagged at position 1");
+  assert.ok(!low(4, 99, 0), "too few impressions");
+  assert.ok(low(15, 1000, 4) && !low(15, 1000, 6), "beyond position 10 the bar is 0.5%");
+  assert.deepEqual(ctrCandidates(rows, [{ ...g("https://x.it/a", 1, 9, 4), query: "q1" }, { ...g("http://x.it/a/", 1, 90, 4), query: "q2" }]).map((c) => [c.url, c.queries]), [["https://x.it/a", ["q2", "q1"]]], "top queries joined by normalised URL, most impressions first");
+  assert.ok(ctrPrompt("x.it", ctrCandidates(rows, [])).includes("https://x.it/a"));
+  const sum = gscSummary(data.pages);
+  assert.deepEqual([sum.clicks, sum.impressions], [10, 635]);
+  const cq = (query: string, page: string, impressions: number) => ({ ...g(page, 0, impressions, 5), query });
+  assert.deepEqual(
+    queryCannibalization([cq("seo", "/a", 50), cq("seo", "/b", 20), cq("seo", "/c", 9), cq("solo", "/a", 500), cq("duo", "/a", 10), cq("duo", "/b", 100), cq("thin", "/a", 9), cq("thin", "/b", 9)]).map((c) => [c.query, c.impressions, c.pages.map((p) => p.page)]),
+    [["duo", 110, ["/b", "/a"]], ["seo", 70, ["/a", "/b"]]],
+    "2+ pages with 10+ impressions each, biggest first",
+  );
+  assert.deepEqual(defaultRange(new Date(2026, 9, 18)), { start: "2026-09-18", end: "2026-10-15" }, "28 days ending 3 days ago");
+  assert.deepEqual(defaultRange(new Date(2026, 0, 20)), { start: "2025-12-21", end: "2026-01-17" }, "across a year boundary");
+  const sites = (...u: string[]) => u.map((site_url) => ({ site_url, permission_level: "siteOwner" }));
+  assert.equal(matchProperty(sites("https://x.it/", "sc-domain:x.it"), "www.x.it"), "sc-domain:x.it", "domain property first");
+  assert.equal(matchProperty(sites("http://x.it/", "https://www.x.it/"), "x.it"), "https://www.x.it/", "https before http, www as a fallback");
+  assert.equal(matchProperty(sites("https://other.it/"), "x.it"), null);
+}
 console.log("pages.check: ok");

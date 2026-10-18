@@ -7,6 +7,7 @@ import { GeoReport } from "./GeoReport";
 import { TopicsReport } from "./TopicsReport";
 import { CompetitorReport } from "./CompetitorReport";
 import { TrackerReport } from "./TrackerReport";
+import { SearchConsoleReport } from "./SearchConsoleReport";
 import { SiteStructure } from "./SiteStructure";
 import { Overview } from "./Overview";
 import { HelpButton } from "./HelpButton";
@@ -84,6 +85,8 @@ type Props = {
   aiReady: boolean;
   onSaveSitemap: () => void;
   onSaveLlms: () => void;
+  onOpenSettings: () => void;
+  settingsOpen: boolean;
 };
 
 const when = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short" });
@@ -343,6 +346,16 @@ export function Reports(p: Props) {
           }}
         />
       )}
+      {tab === "gsc" && (
+        <SearchConsoleReport
+          pages={pages}
+          host={a.host}
+          aiEngine={p.settings.ai_engine}
+          aiReady={p.aiReady}
+          onOpenSettings={p.onOpenSettings}
+          settingsOpen={p.settingsOpen}
+        />
+      )}
       {tab === "tracker" && (
         <TrackerReport host={a.host} engine={p.settings.ai_engine} aiReady={p.aiReady} suggestions={trackerSuggestions} />
       )}
@@ -388,7 +401,7 @@ export function Reports(p: Props) {
           }}
         />
       )}
-      {tab !== "images" && tab !== "overview" && tab !== "competitor" && tab !== "tracker" && selected && path && (
+      {tab !== "images" && tab !== "overview" && tab !== "competitor" && tab !== "gsc" && tab !== "tracker" && selected && path && (
         <DetailPanel
           crawlPath={path}
           url={selected}

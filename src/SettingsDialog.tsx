@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, USER_AGENTS, type RuleSpec, type Settings } from "./s
 import { invoke } from "@tauri-apps/api/core";
 import { tr } from "./i18n";
 import { AiSettings, type AiStatus } from "./AiSettings";
+import { GscSettings } from "./GscSettings";
 
 type Props = {
   open: boolean;
@@ -169,6 +170,8 @@ export function SettingsDialog({ open, settings, onSave, onClose, aiStatus, onAi
           status={aiStatus}
           onRefresh={onAiStatusChange}
         />
+
+        <GscSettings open={open} />
 
         <footer>
           <button type="button" className="link" onClick={() => setDraft(DEFAULT_SETTINGS)}>

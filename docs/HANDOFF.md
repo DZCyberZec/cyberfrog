@@ -43,7 +43,7 @@ Dettagli di moduli, dati, motori AI e sicurezza: [ARCHITECTURE.md](ARCHITECTURE.
 
 **Verificato dal vivo su cyberzec.it:** salute SEO 82/100, citabilità media 87/100, tutti i crawler AI aperti, llms.txt valido, 8 cluster, 3 casi di cannibalizzazione, 12 link da aggiungere. Il tracker con Codex trova cyberzec.it citato al 2° posto per "consulenza cybersecurity PMI Senigallia", mentre per "migliori consulenti SEO Marche" l'AI cita solo altri siti.
 
-**Test:** 57 test Rust, `scripts/pages.check.ts`, clippy senza avvisi.
+**Test:** 56 test Rust, `scripts/pages.check.ts`, clippy senza avvisi.
 
 Cosa manca e cosa va ancora verificato dal vivo: [ROADMAP.md](ROADMAP.md).
 

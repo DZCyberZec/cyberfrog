@@ -35,7 +35,7 @@ Il file ha circa 2700 righe: va diviso in `crawler/` con fetch, parse, store, re
 
 ## 4. Da verificare dal vivo
 
-- **Claude Code:** sul Mac dell'autore il login del terminale è scaduto (`claude` → `/login`). Codex invece è collegato e provato dal vivo (risposte e ricerca web).
+- **Google Search Console dal vivo:** importare il JSON del client OAuth in Impostazioni → Google Search Console → Avanzate, poi "Accedi con Google" (testato finora con server finti e test).
 - **Pianificazioni:** il runner `--scheduled` e launchd sono provati a mano; manca un giro completo creato dall'app installata.
 - **Rendering JS** su un sito che usa davvero JavaScript (cyberzec.it è server-side).
 - **Schema FAQ e llms.txt** generati dall'app installata (finora provati con test e typecheck).

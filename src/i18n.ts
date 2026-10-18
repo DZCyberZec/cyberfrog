@@ -518,7 +518,7 @@ const EN: Record<string, string> = {
   "Avvio…": "Starting…",
   "Accedi a {name}": "Sign in to {name}",
   "Accedi nel browser che si è aperto: CyberFrog si aggiorna da solo quando hai finito.": "Sign in in the browser that opened: CyberFrog updates by itself when you're done.",
-  "Accedi nel browser che si è aperto. Alla fine Claude mostra un codice: copialo e incollalo qui.": "Sign in in the browser that opened. At the end Claude shows a code: copy it and paste it here.",
+  "Accedi nel browser che si è aperto: CyberFrog si aggiorna da solo quando hai finito. Se invece Claude ti mostra un codice, incollalo qui.": "Sign in in the browser that opened: CyberFrog updates by itself when you're done. If Claude shows you a code instead, paste it here.",
   "Codice di accesso": "Sign-in code",
   "Conferma": "Confirm",
   "Il browser non si è aperto? Apri la pagina di accesso": "Browser didn't open? Open the sign-in page",

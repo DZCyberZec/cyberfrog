@@ -83,7 +83,7 @@ Altri file nella cartella dati dell'app: `schedules.json` (pianificazioni), `ai_
 | Codex | `codex exec` con `--ignore-user-config --ignore-rules`, sandbox in sola lettura, shell/app/browser/computer use/plugin/hook disattivati; per la ricerca `codex --search` | abbonamento ChatGPT |
 | API Anthropic | Messages API `claude-opus-5-5`, `fallbacks: "default"`; ricerca con `web_search_20260209` | a consumo, chiave nel Portachiavi |
 
-Lo stato (installato, login fatto) si legge senza spendere token: `claude auth status`, `codex login status`.
+Lo stato (installato, login fatto) si legge senza spendere token: `claude auth status`, `codex login status`. Il login si avvia dalle Impostazioni (`ai/login.rs`): `claude auth login --claudeai` e `codex login` aprono il browser e di solito si completano da soli; per Claude c'è un campo di riserva per incollare il codice, passato alla CLI via stdin.
 
 ## Google Search Console
 

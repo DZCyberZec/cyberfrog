@@ -1,12 +1,16 @@
-// "Sign in" for Claude Code and Codex from inside CyberFrog. Claude Code shows a code in the browser
-// after sign-in, pasted here; Codex comes back by itself.
-import { useState } from "react";
+// "Sign in" for Claude Code and Codex from inside CyberFrog. Both usually finish by themselves in the
+// browser; Claude Code may instead show a code, which can be pasted here.
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { tr, trError } from "./i18n";
 
 type Started = { url: string | null; needs_code: boolean };
 type Props = { engine: "claude-code" | "codex"; onDone: () => void };
+type Status = { claude_code_ready: boolean; codex_ready: boolean };
+
+/** How often to look whether the browser sign-in has finished. */
+const POLL_MS = 2500;
 
 export function CliLogin({ engine, onDone }: Props) {
   const [phase, setPhase] = useState<"idle" | "starting" | "code" | "browser" | "sending">("idle");
@@ -14,6 +18,21 @@ export function CliLogin({ engine, onDone }: Props) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const name = engine === "codex" ? "Codex" : "Claude";
+
+  // the CLI usually completes on its own once the browser sign-in is done: watch for it
+  useEffect(() => {
+    if (phase !== "code") return;
+    const timer = setInterval(() => {
+      invoke<Status>("ai_status").then((s) => {
+        if (engine === "codex" ? s.codex_ready : s.claude_code_ready) {
+          invoke("ai_login_cancel").catch(() => {});
+          setPhase("idle");
+          onDone();
+        }
+      }, () => {});
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [phase, engine, onDone]);
 
   async function start() {
     setError(null);
@@ -64,7 +83,7 @@ export function CliLogin({ engine, onDone }: Props) {
         <small>{tr("Accedi nel browser che si è aperto: CyberFrog si aggiorna da solo quando hai finito.")}</small>
       ) : (
         <>
-          <small>{tr("Accedi nel browser che si è aperto. Alla fine Claude mostra un codice: copialo e incollalo qui.")}</small>
+          <small>{tr("Accedi nel browser che si è aperto: CyberFrog si aggiorna da solo quando hai finito. Se invece Claude ti mostra un codice, incollalo qui.")}</small>
           <div className="key-row">
             <input
               type="text"

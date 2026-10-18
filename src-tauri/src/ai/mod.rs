@@ -121,4 +121,3 @@ mod tests {
         assert_eq!(split_sources("niente fonti").cited, Vec::<String>::new());
     }
 }
-

@@ -1,9 +1,11 @@
 mod ai;
 pub mod crawler;
 pub mod geo;
+mod gsc;
 pub mod mcp;
 pub mod report;
 pub mod schedule;
+mod secrets;
 pub mod topics;
 mod tracker;
 
@@ -268,6 +270,44 @@ async fn ai_search(engine: String, query: String) -> Result<ai::SearchAnswer, St
 }
 
 #[tauri::command]
+fn gsc_status() -> gsc::Status {
+    gsc::status()
+}
+
+/// Opens Google's sign-in in the browser and waits for it (up to 5 minutes).
+#[tauri::command]
+async fn gsc_login() -> Result<gsc::Status, String> {
+    gsc::login().await
+}
+
+#[tauri::command]
+fn gsc_logout() {
+    gsc::logout()
+}
+
+/// Imports the OAuth client JSON downloaded from Google Cloud ("Desktop app").
+#[tauri::command]
+fn gsc_set_client(json: String) -> Result<(), String> {
+    gsc::set_client(&json)
+}
+
+/// Imports a service account key JSON (advanced option).
+#[tauri::command]
+fn gsc_set_service_account(json: String) -> Result<gsc::Status, String> {
+    gsc::set_service_account(&json)
+}
+
+#[tauri::command]
+async fn gsc_sites() -> Result<Vec<gsc::api::Site>, String> {
+    gsc::sites().await
+}
+
+#[tauri::command]
+async fn gsc_query(site: String, start: String, end: String) -> Result<gsc::api::GscData, String> {
+    gsc::query(&site, &start, &end).await
+}
+
+#[tauri::command]
 fn tracker_load() -> serde_json::Value {
     tracker::load()
 }
@@ -405,6 +445,13 @@ pub fn run() {
             ai_search,
             tracker_load,
             tracker_save,
+            gsc_status,
+            gsc_login,
+            gsc_logout,
+            gsc_set_client,
+            gsc_set_service_account,
+            gsc_sites,
+            gsc_query,
             add_schedule,
             remove_schedule,
             ai_status,

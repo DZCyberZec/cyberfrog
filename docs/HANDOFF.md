@@ -2,7 +2,7 @@
 
 Documento per riprendere il lavoro in una nuova chat: chiedi di leggere `docs/HANDOFF.md`, poi [ARCHITECTURE.md](ARCHITECTURE.md) (com'è fatto) e [ROADMAP.md](ROADMAP.md) (cosa manca).
 
-Ultimo aggiornamento: 2026-10-18 (v0.9.0).
+Ultimo aggiornamento: 2026-10-18 (v0.10.0).
 
 ## Cos'è
 
@@ -25,7 +25,7 @@ CyberFrog – Another SEO Tool: crawler SEO e GEO desktop di Daniele Zecca (Cybe
 
 Dettagli di moduli, dati, motori AI e sicurezza: [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Dove siamo (v0.9.0)
+## Dove siamo (v0.10.0)
 
 | Versione | Funzionalità |
 |---|---|
@@ -39,9 +39,11 @@ Dettagli di moduli, dati, motori AI e sicurezza: [ARCHITECTURE.md](ARCHITECTURE.
 | 0.8.0 | Report "Argomenti e link": cluster, cannibalizzazione, link interni da aggiungere (TF-IDF locale) |
 | 0.9.0 | **Competitor** (confronto su 13 indicatori, argomenti mancanti ed esclusivi, azioni per superarlo, piano AI); **tracker AI** (l'AI con ricerca web ti cita? in che posizione? chi cita al posto tuo? con storico); **Codex** come terzo motore AI, con stato di connessione e passaggi per collegare ogni motore; **report per il cliente** (HTML da stampare in PDF); **generatori** di llms.txt e schema FAQ; **aiuto "?"** su ogni report; **MCP** con `geo_report`, `topics_report`, `content_gap` |
 
+| 0.10.0 | **Google Search Console:** accesso Google (OAuth + PKCE, token nel Portachiavi) o service account (opzione avanzata); report con clic, impressioni, CTR e posizione per pagina accanto al crawl, filtri CTR basso / quasi in prima pagina / non trovate dal crawl / senza impressioni, query in cannibalizzazione, riscrittura title e meta con AI |
+
 **Verificato dal vivo su cyberzec.it:** salute SEO 82/100, citabilità media 87/100, tutti i crawler AI aperti, llms.txt valido, 8 cluster, 3 casi di cannibalizzazione, 12 link da aggiungere. Il tracker con Codex trova cyberzec.it citato al 2° posto per "consulenza cybersecurity PMI Senigallia", mentre per "migliori consulenti SEO Marche" l'AI cita solo altri siti.
 
-**Test:** 44 test Rust, `scripts/pages.check.ts`, clippy senza avvisi.
+**Test:** 57 test Rust, `scripts/pages.check.ts`, clippy senza avvisi.
 
 Cosa manca e cosa va ancora verificato dal vivo: [ROADMAP.md](ROADMAP.md).
 

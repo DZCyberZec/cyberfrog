@@ -1,6 +1,6 @@
 # CyberFrog — architettura
 
-Come è fatto CyberFrog e perché. Aggiornato alla v0.9.0 (2026-10-18). Per lo stato del progetto e cosa manca: [HANDOFF.md](HANDOFF.md) e [ROADMAP.md](ROADMAP.md).
+Come è fatto CyberFrog e perché. Aggiornato alla v0.10.0 (2026-10-18). Per lo stato del progetto e cosa manca: [HANDOFF.md](HANDOFF.md) e [ROADMAP.md](ROADMAP.md).
 
 ## In una frase
 
@@ -32,9 +32,11 @@ App desktop **Tauri 2**: un backend **Rust** che scansiona i siti e salva ogni c
 | `ai/` | `mod.rs` (scelta motore, stato connessione, ricerca web), `claude_code.rs`, `codex.rs`, `api.rs` (Messages API), `keychain.rs` (chiave nel Portachiavi) |
 | `schedule.rs` | Crawl pianificati: plist launchd, esecuzione headless, confronto col giro precedente, notifica macOS |
 | `tracker.rs` | Storico del tracker di visibilità AI (`ai_tracker.json`) |
+| `gsc/` | Google Search Console: `oauth.rs` (accesso Google per app desktop: loopback 127.0.0.1 + PKCE + state), `service_account.rs` (JWT RS256 firmato con la chiave del service account), `api.rs` (proprietà e Search Analytics), `mod.rs` (stato, token in memoria) |
+| `secrets.rs` | Segreti nel Portachiavi (token Google, client OAuth, service account), salvati in esadecimale |
 | `mcp.rs` | Server MCP su stdio: `crawl_site`, `list_crawls`, `crawl_summary`, `query_crawl`, `page_details`, `geo_report`, `topics_report`, `content_gap` |
 
-**Comandi Tauri:** `start_crawl`, `stop_crawl`, `open_crawl`, `page_links`, `image_pages`, `save_crawl_as`, `list_crawls`, `write_text_file`, `find_browser`, `list_schedules`, `add_schedule`, `remove_schedule`, `content_gap`, `ai_status`, `ai_set_key`, `ai_complete`, `ai_search`, `tracker_load`, `tracker_save`, `faq_schema`.
+**Comandi Tauri:** `start_crawl`, `stop_crawl`, `open_crawl`, `page_links`, `image_pages`, `save_crawl_as`, `list_crawls`, `write_text_file`, `find_browser`, `list_schedules`, `add_schedule`, `remove_schedule`, `content_gap`, `ai_status`, `ai_set_key`, `ai_complete`, `ai_search`, `tracker_load`, `tracker_save`, `faq_schema`, `gsc_status`, `gsc_login`, `gsc_logout`, `gsc_set_client`, `gsc_set_service_account`, `gsc_sites`, `gsc_query`.
 
 ## Interfaccia (`src/`)
 
@@ -47,11 +49,11 @@ Regola: la **logica sta in file `.ts` puri e testati** (`scripts/pages.check.ts`
 | `nav.ts`, `Sidebar.tsx` | Elenco dei report a gruppi, badge dei problemi |
 | `useAnalysis.ts` | Calcoli condivisi: problemi, conteggi, salute, righe GEO, citabilità |
 | `pages.ts` | Tipi (rispecchiano Rust), filtri di ogni report, `ISSUES`, `allIssues`, confronto tra crawl, CSV, sitemap |
-| `health.ts`, `geo.ts`, `topics.ts`, `competitor.ts`, `tracker.ts`, `llms.ts`, `clientReport.ts`, `ai.ts` | Logica pura per salute, GEO, argomenti, competitor, tracker AI, llms.txt, report per il cliente, prompt AI |
-| `Overview.tsx`, `GeoReport.tsx`, `TopicsReport.tsx`, `CompetitorReport.tsx`, `TrackerReport.tsx`, `SiteStructure.tsx` | Viste dei report speciali |
+| `health.ts`, `geo.ts`, `topics.ts`, `competitor.ts`, `tracker.ts`, `gsc.ts`, `llms.ts`, `clientReport.ts`, `ai.ts` | Logica pura per salute, GEO, argomenti, competitor, tracker AI, llms.txt, report per il cliente, prompt AI |
+| `Overview.tsx`, `GeoReport.tsx`, `TopicsReport.tsx`, `CompetitorReport.tsx`, `TrackerReport.tsx`, `SearchConsoleReport.tsx`, `SiteStructure.tsx` | Viste dei report speciali |
 | `DataTable.tsx`, `columns.tsx` | Tabella generica (filtri, ordinamento, virtualizzazione, CSV) e colonne di tutte le tabelle |
 | `DetailPanel.tsx`, `ImagePanel.tsx`, `FaqSchema.tsx`, `AiAssist.tsx` | Pannelli di dettaglio, generatore FAQ, output AI |
-| `SettingsDialog.tsx`, `AiSettings.tsx`, `ListDialog.tsx`, `SchedulesDialog.tsx` | Dialoghi |
+| `SettingsDialog.tsx`, `AiSettings.tsx`, `GscSettings.tsx`, `ListDialog.tsx`, `SchedulesDialog.tsx` | Dialoghi |
 | `CrawlForm.tsx`, `StartScreen.tsx`, `Menu.tsx`, `CommandPalette.tsx`, `HelpButton.tsx` + `help.ts`, `icons.tsx` | Elementi d'interfaccia |
 | `i18n.ts` | Testi italiani come chiavi, dizionario inglese, `tr()` e `trError()` |
 
@@ -83,12 +85,21 @@ Altri file nella cartella dati dell'app: `schedules.json` (pianificazioni), `ai_
 
 Lo stato (installato, login fatto) si legge senza spendere token: `claude auth status`, `codex login status`.
 
+## Google Search Console
+
+| Accesso | Come | Dove resta |
+|---|---|---|
+| Login Google (consigliato) | OAuth per app desktop (RFC 8252): CyberFrog apre il browser, Google torna su un listener `127.0.0.1` usa e getta; PKCE S256 e `state` casuale verificati; scope `webmasters.readonly` + `openid email` | refresh token nel Portachiavi; access token solo in memoria |
+| Service account (avanzato) | JWT RS256 firmato con la chiave del file JSON, scambiato con un token (10 minuti) | chiave nel Portachiavi; il file scaricato va cancellato |
+
+**Client OAuth:** le build di release lo includono da variabili d'ambiente al momento della compilazione (`CYBERFROG_GOOGLE_CLIENT_ID`, `CYBERFROG_GOOGLE_CLIENT_SECRET`), mai nel repository; in alternativa l'utente importa il JSON "App desktop" scaricato da Google Cloud. Per le app desktop il "secret" di Google non è confidenziale (RFC 8252 §8.5): la sicurezza viene da PKCE e dal redirect locale.
+
 ## Sicurezza
 
 L'utente lavora in cybersecurity: ogni dato che arriva da fuori è **non fidato**.
 
 - **Pagine scansionate:** possono contenere istruzioni per un'AI (prompt injection). Per questo le CLI AI girano senza strumenti (solo ricerca web per il tracker, dove il prompt è la domanda dell'utente), senza MCP, in una cartella vuota, con timeout e `kill_on_drop`. Verificato a mano che Codex non può leggere un file locale.
-- **Segreti:** la chiave API va solo nel Portachiavi, passata a `security` via stdin, mai in argv, URL o file; non arriva mai alla webview.
+- **Segreti:** chiave API, token Google, client OAuth e chiave del service account solo nel Portachiavi, passati a `security` via stdin (in esadecimale per i dati non testuali), mai in argv, URL o file; non arrivano mai alla webview. Il `Debug` del service account oscura la chiave.
 - **Report per il cliente:** ogni testo del crawl è "escapato" in HTML (test con `<script>`).
 - **Schema FAQ:** il JSON-LD neutralizza `</` perché il testo della pagina non possa chiudere il blocco script.
 - **Download:** robots.txt e llms.txt limitati a 512 KB, pagine per lo schema FAQ a 2 MB, timeout su ogni richiesta.

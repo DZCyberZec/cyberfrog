@@ -1,18 +1,14 @@
 # CyberFrog — roadmap
 
-Cosa manca, in ordine di priorità. Aggiornata al 2026-10-18 (v0.9.0). Ciò che è già fatto è in [HANDOFF.md](HANDOFF.md); com'è costruito in [ARCHITECTURE.md](ARCHITECTURE.md).
+Cosa manca, in ordine di priorità. Aggiornata al 2026-10-18 (v0.10.0). Ciò che è già fatto è in [HANDOFF.md](HANDOFF.md); com'è costruito in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## 1. Prossimi lavori (chiesti dall'utente)
 
-### Google Search Console — in attesa di una scelta dell'utente
-Clic, impressioni, CTR, posizione e query per ogni pagina, accanto ai dati del crawl. Usi previsti:
-- pagine con molte impressioni ma CTR basso, con l'AI che riscrive title e meta;
-- query su cui due pagine del sito si fanno concorrenza (cannibalizzazione su dati reali di Google);
-- pagine con traffico ma senza link interni, pagine in Search Console mai trovate dal crawl.
-
-Accesso, da decidere con l'utente:
-- **Login Google (OAuth), consigliato:** l'autore crea una volta un client OAuth "App desktop" su Google Cloud; ogni utente accede con il proprio account e vede solo le proprie proprietà. Token nel Portachiavi, scope in sola lettura `webmasters.readonly`, revocabile dall'account Google. Flusso loopback + PKCE, senza nuove dipendenze pesanti (aws-lc-rs è già presente per la cifratura). Finché Google non verifica l'app (gratuito, qualche settimana, serve una pagina privacy): avviso "app non verificata" e massimo 100 utenti.
-- **Service account (file JSON), opzione avanzata nelle Impostazioni:** l'utente crea un account di servizio, lo aggiunge come utente alla proprietà e carica il JSON. La chiave privata va solo nel Portachiavi e il file originale va cancellato. È meno sicuro: la chiave non scade, finché non viene revocata.
+### Google Search Console — fatto in v0.10.0, da completare
+Fatti: login Google (OAuth + PKCE) e service account, report con pagine, CTR basso, "quasi in prima pagina", pagine non trovate dal crawl, query in cannibalizzazione, riscrittura title/meta con AI. Da fare:
+- **Client OAuth integrato nella release:** compilare con `CYBERFROG_GOOGLE_CLIENT_ID` e `CYBERFROG_GOOGLE_CLIENT_SECRET`, così chi scarica l'app clicca solo "Accedi con Google".
+- **Verifica dell'app su Google** (pagina privacy, dominio, video demo) per togliere l'avviso "app non verificata" e il limite di 100 utenti.
+- Problemi Search Console nel tab Problemi e nel report per il cliente; dati salvati nel file del crawl e disponibili via MCP.
 
 ### Aggiornamento automatico
 L'app controlla le release su GitHub e si aggiorna da sola (plugin updater di Tauri). Serve una coppia di chiavi per firmare gli aggiornamenti: la chiave privata deve restare all'autore, fuori dal repository.

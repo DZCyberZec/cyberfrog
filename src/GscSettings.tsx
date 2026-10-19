@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { tr, trError } from "./i18n";
 import type { GscStatus } from "./gsc";
 
-type Busy = "login" | "client" | "service" | null;
+type Busy = "login" | "own" | "client" | "service" | null;
 
 /** Settings fieldset: connect Search Console by Google sign-in, or with your own OAuth client or a service account. */
 export function GscSettings({ open }: { open: boolean }) {
@@ -13,6 +13,7 @@ export function GscSettings({ open }: { open: boolean }) {
   const [note, setNote] = useState<string | null>(null);
   const clientFile = useRef<HTMLInputElement>(null);
   const serviceFile = useRef<HTMLInputElement>(null);
+  const ownClientFile = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
     invoke<GscStatus>("gsc_status").then(setStatus, () => setStatus(null));
@@ -38,19 +39,24 @@ export function GscSettings({ open }: { open: boolean }) {
   }
 
   /** The file is read in the webview and passed on as text; nothing else touches the disk from here. */
-  const importFile = (input: HTMLInputElement | null, kind: "client" | "service") => {
+  const importFile = (input: HTMLInputElement | null, kind: "client" | "service" | "own") => {
     const file = input?.files?.[0];
     if (!input || !file) return;
     input.value = ""; // choosing the same file again must still fire onChange
+    const done = {
+      client: tr("Client OAuth importato: ora puoi accedere con Google."),
+      service: tr("Service account importato. Aggiungi l'email del service account come utente della proprietà in Search Console ed elimina il file JSON scaricato."),
+      own: tr("Account aggiunto con il suo client OAuth."),
+    }[kind];
     run(
       kind,
       async () => {
         const json = await file.text();
-        await (kind === "client" ? invoke("gsc_set_client", { json }) : invoke("gsc_set_service_account", { json }));
+        if (kind === "client") await invoke("gsc_set_client", { json });
+        else if (kind === "service") await invoke("gsc_set_service_account", { json });
+        else await invoke("gsc_login", { clientJson: json });
       },
-      kind === "client"
-        ? tr("Client OAuth importato: ora puoi accedere con Google.")
-        : tr("Service account importato. Aggiungi l'email del service account come utente della proprietà in Search Console ed elimina il file JSON scaricato."),
+      done,
     );
   };
 
@@ -68,6 +74,7 @@ export function GscSettings({ open }: { open: boolean }) {
             <li key={a.id}>
               <span className="badge ok">{a.method === "service_account" ? tr("Service account") : "Google"}</span>
               <span className="gsc-email">{a.email ?? tr("Account Google")}</span>
+              {a.own_client && <span className="badge redirect">{tr("Client dedicato")}</span>}
               <button
                 type="button"
                 className="link"
@@ -98,8 +105,14 @@ export function GscSettings({ open }: { open: boolean }) {
               ? tr("Aggiungi un altro account Google")
               : tr("Accedi con Google")}
         </button>
-        {connected && <small>{tr("Ogni proprietà usa l'account che può leggerla.")}</small>}
+        <input ref={ownClientFile} type="file" accept="application/json,.json" hidden onChange={() => importFile(ownClientFile.current, "own")} />
+        <button type="button" className="secondary" onClick={() => ownClientFile.current?.click()} disabled={busy !== null}>
+          {busy === "own" ? tr("Attendo l'accesso nel browser…") : tr("Accedi con un client OAuth dedicato…")}
+        </button>
       </div>
+      <small>
+        {tr("Ogni proprietà usa l'account che può leggerla. Se un account appartiene a un altro progetto Google Cloud (per esempio quello di un cliente), accedi con il file JSON del suo client: resta legato solo a quell'account.")}
+      </small>
       {!connected && status && !status.client && (
         <ol className="steps">
           <li>{tr("Su console.cloud.google.com crea un progetto e abilita la Google Search Console API.")}</li>
@@ -124,7 +137,7 @@ export function GscSettings({ open }: { open: boolean }) {
         <div className="gsc-advanced">
           <div className="key-row">
             <span className="engine-label">
-              {tr("Usa un tuo client OAuth (file JSON)")}
+              {tr("Client OAuth predefinito per i nuovi account (file JSON)")}
               {status?.client === "custom" && <span className="badge ok">{tr("Importato")}</span>}
             </span>
             <input ref={clientFile} type="file" accept="application/json,.json" hidden onChange={() => importFile(clientFile.current, "client")} />

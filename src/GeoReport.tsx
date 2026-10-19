@@ -78,8 +78,8 @@ export function GeoReport({ geo, rows, htmlPages, onGenerateLlms, ...table }: Pr
           </span>
           <span>Content-Signal: {geo.content_signals.length ? tr("Dichiarato") : tr("Non dichiarato")}</span>
           <span className="spacer" />
-          <button type="button" className="link" onClick={toggle} aria-expanded={false}>
-            {tr("Mostra riepilogo")}
+          <button type="button" className="geo-toggle" onClick={toggle} aria-expanded={false}>
+            {tr("Mostra riepilogo")} <span aria-hidden>▾</span>
           </button>
         </section>
         <DataTable data={rows} columns={columns} filters={filters} {...table} />
@@ -89,9 +89,12 @@ export function GeoReport({ geo, rows, htmlPages, onGenerateLlms, ...table }: Pr
   return (
     <div className="geo">
       <section className="geo-site" aria-label={tr("Sito")}>
-        <button type="button" className="link geo-collapse" onClick={toggle} aria-expanded>
-          {tr("Comprimi riepilogo")}
-        </button>
+        <div className="geo-site-head">
+          <h2>{tr("Riepilogo del sito")}</h2>
+          <button type="button" className="geo-toggle" onClick={toggle} aria-expanded>
+            {tr("Comprimi riepilogo")} <span aria-hidden>▴</span>
+          </button>
+        </div>
         <div className="geo-card">
           <h3>{tr("Citabilità media")}</h3>
           <p className="geo-big">{scoreBadge}</p>

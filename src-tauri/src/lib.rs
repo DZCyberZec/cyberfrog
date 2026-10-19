@@ -304,8 +304,8 @@ fn gsc_status() -> gsc::Status {
 
 /// Opens Google's sign-in in the browser and waits for it (up to 5 minutes).
 #[tauri::command]
-async fn gsc_login() -> Result<gsc::Status, String> {
-    gsc::login().await
+async fn gsc_login(client_json: Option<String>) -> Result<gsc::Status, String> {
+    gsc::login(client_json.as_deref()).await
 }
 
 #[tauri::command]

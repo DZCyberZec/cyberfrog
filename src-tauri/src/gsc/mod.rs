@@ -79,9 +79,18 @@ fn forget(id: &str) {
 }
 
 /// Adds a Google account by signing in; the same account signed in again replaces its old entry.
-pub async fn login() -> Result<Status, String> {
-    let (client, _) = client()
-        .ok_or("Nessun client OAuth: importa il file JSON del client Google nelle Impostazioni")?;
+/// `client_json` gives this account an OAuth client of its own (e.g. a Google Cloud project of the
+/// site owner); otherwise the shared client is used.
+pub async fn login(client_json: Option<&str>) -> Result<Status, String> {
+    let own_client = client_json.is_some();
+    let client = match client_json {
+        Some(json) => Client::from_json(json)?,
+        None => client()
+            .ok_or(
+                "Nessun client OAuth: importa il file JSON del client Google nelle Impostazioni",
+            )?
+            .0,
+    };
     let tokens = oauth::sign_in(&client).await?;
     let refresh_token = tokens
         .refresh_token
@@ -91,6 +100,8 @@ pub async fn login() -> Result<Status, String> {
     let account = accounts::store(Credentials::OAuth(Saved {
         refresh_token,
         email,
+        client: Some(client),
+        own_client,
     }))?;
     remember(&account.id, &tokens.access_token, tokens.expires_in);
     Ok(status())
@@ -131,9 +142,12 @@ async fn access_token(id: &str) -> Result<String, String> {
     let tokens = match accounts::credentials(id)? {
         Credentials::ServiceAccount(sa) => service_account::token(&sa).await?,
         Credentials::OAuth(saved) => {
-            let (client, _) = client().ok_or(
-                "Nessun client OAuth: importa il file JSON del client Google nelle Impostazioni",
-            )?;
+            let client = match saved.client {
+                Some(c) => c,
+                None => client().map(|(c, _)| c).ok_or(
+                    "Nessun client OAuth: importa il file JSON del client Google nelle Impostazioni",
+                )?,
+            };
             oauth::refresh(&client, &saved.refresh_token).await?
         }
     };

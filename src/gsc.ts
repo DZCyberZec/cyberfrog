@@ -5,7 +5,7 @@ import { isHtmlPage, nonIndexableReason, type FilterDef, type Page } from "./pag
 
 /** Mirrors `gsc_status` in src-tauri. `client` is which OAuth client the app can sign in with. */
 /** Mirrors `gsc::Status`, `gsc::SiteOf` and `gsc::Sites` in src-tauri/src/gsc/mod.rs. */
-export type GscAccount = { id: string; method: "oauth" | "service_account"; email: string | null };
+export type GscAccount = { id: string; method: "oauth" | "service_account"; email: string | null; own_client: boolean };
 export type GscStatus = { accounts: GscAccount[]; client: "builtin" | "custom" | null };
 export type GscSite = { site_url: string; permission_level: string; account: string; email: string | null };
 export type GscSites = { sites: GscSite[]; failed: string[] };

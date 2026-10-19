@@ -5,6 +5,7 @@
 use crate::secrets::{self, GOOGLE};
 use service_account::ServiceAccount;
 
+use super::oauth::Client;
 use super::service_account;
 
 /// Keychain item with the account list.
@@ -20,6 +21,9 @@ pub struct Account {
     /// "oauth" or "service_account".
     pub method: String,
     pub email: Option<String>,
+    /// Signed in with an OAuth client of its own, not the one shared by every account.
+    #[serde(default)]
+    pub own_client: bool,
 }
 
 /// What an OAuth sign-in leaves in the Keychain.
@@ -27,6 +31,12 @@ pub struct Account {
 pub struct Saved {
     pub refresh_token: String,
     pub email: Option<String>,
+    /// The client the account signed in with: Google only refreshes a token for that same client,
+    /// so it stays with the account even if the shared client changes later. None before v0.11.1.
+    #[serde(default)]
+    pub client: Option<Client>,
+    #[serde(default)]
+    pub own_client: bool,
 }
 
 pub enum Credentials {
@@ -95,6 +105,7 @@ fn add(list: &mut Vec<Account>, credentials: Credentials) -> Result<Account, Str
                 id: id_for("oauth", s.email.as_deref().unwrap_or(&s.refresh_token)),
                 method: "oauth".into(),
                 email: s.email.clone(),
+                own_client: s.own_client,
             },
             serde_json::to_string(s),
         ),
@@ -103,6 +114,7 @@ fn add(list: &mut Vec<Account>, credentials: Credentials) -> Result<Account, Str
                 id: id_for("service_account", &sa.client_email),
                 method: "service_account".into(),
                 email: Some(sa.client_email.clone()),
+                own_client: false,
             },
             serde_json::to_string(sa),
         ),
@@ -159,6 +171,28 @@ mod tests {
         assert_ne!(a, id_for("oauth", "other@example.com"));
         assert!(valid_id(&a));
         assert!(crate::secrets::plain(&item(&a)));
+    }
+
+    #[test]
+    fn accounts_saved_before_per_account_clients_still_load() {
+        let old: Saved =
+            serde_json::from_str(r#"{"refresh_token":"r","email":"me@x.it"}"#).unwrap();
+        assert!(old.client.is_none() && !old.own_client);
+        let index: Vec<Account> =
+            serde_json::from_str(r#"[{"id":"0123456789abcdef","method":"oauth","email":null}]"#)
+                .unwrap();
+        assert!(!index[0].own_client);
+        let new = Saved {
+            client: Some(Client {
+                client_id: "id".into(),
+                client_secret: "s".into(),
+            }),
+            own_client: true,
+            ..old
+        };
+        let back: Saved = serde_json::from_str(&serde_json::to_string(&new).unwrap()).unwrap();
+        assert_eq!(back.client.unwrap().client_id, "id");
+        assert!(back.own_client);
     }
 
     #[test]

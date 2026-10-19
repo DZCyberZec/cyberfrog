@@ -347,8 +347,13 @@ dialog.settings .cli-login .key-row { align-self: stretch; }
 .dot.partial { background: var(--redirect); }
 .dot.closed { background: var(--client); }
 @media (max-width: 1100px) { .geo-site { grid-template-columns: 1fr 1fr; } }
-.geo-site { position: relative; }
-.geo-collapse { position: absolute; top: 2px; right: 16px; font-size: 12px; }
+.geo-site-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.geo-site-head h2 { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.geo-toggle {
+  padding: 4px 10px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); cursor: pointer;
+}
+.geo-toggle:hover { background: var(--sunken); }
 .geo-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 20px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--bg); font-size: 13px; }
 .geo-strip .spacer { flex: 1; }
 
@@ -436,6 +441,13 @@ dialog.settings .cli-login .key-row { align-self: stretch; }
 .filters button.secondary { border-radius: var(--radius); font-weight: 600; }
 .filters button:disabled { opacity: 0.5; cursor: default; }
 .export-msg { color: var(--muted); }
+
+/* Scrollbars always visible (macOS hides overlay scrollbars, and wide tables need a handle to drag) */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: var(--sunken); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border: 3px solid var(--sunken); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+::-webkit-scrollbar-corner { background: var(--sunken); }
 
 /* Table */
 .grid { flex: 1; min-height: 0; overflow: auto; background: var(--surface); }

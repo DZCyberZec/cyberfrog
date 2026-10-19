@@ -54,33 +54,51 @@ export function GscSettings({ open }: { open: boolean }) {
     );
   };
 
-  const connected = status?.connected ?? false;
+  const accounts = status?.accounts ?? [];
+  const connected = accounts.length > 0;
   return (
     <fieldset>
       <legend>Google Search Console</legend>
       <small>
         {tr("Mostra clic, impressioni e posizione di ogni pagina accanto al crawl. L'accesso è di sola lettura e puoi revocarlo in ogni momento dal tuo account Google.")}
       </small>
+      {connected ? (
+        <ul className="gsc-accounts">
+          {accounts.map((a) => (
+            <li key={a.id}>
+              <span className="badge ok">{a.method === "service_account" ? tr("Service account") : "Google"}</span>
+              <span className="gsc-email">{a.email ?? tr("Account Google")}</span>
+              <button
+                type="button"
+                className="link"
+                onClick={() => run("login", () => invoke("gsc_logout", { account: a.id }))}
+                disabled={busy !== null}
+              >
+                {tr("Rimuovi")}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="key-row">
+          <span className="badge blocked">{tr("Non collegato")}</span>
+        </div>
+      )}
       <div className="key-row">
-        <span className={`badge ${connected ? "ok" : "blocked"}`}>
-          {connected ? tr("Connesso come {account}", { account: status?.account ?? "?" }) : tr("Non collegato")}
-        </span>
-        <span className="spacer" />
-        {connected ? (
-          <button type="button" className="secondary" onClick={() => run("login", () => invoke("gsc_logout"))} disabled={busy !== null}>
-            {tr("Esci")}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => run("login", () => invoke("gsc_login"))}
-            disabled={busy !== null || !status?.client}
-            title={status?.client ? undefined : tr("Importa prima un client OAuth (vedi i passi qui sotto)")}
-          >
-            {busy === "login" ? tr("Attendo l'accesso nel browser…") : tr("Accedi con Google")}
-          </button>
-        )}
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => run("login", () => invoke("gsc_login"))}
+          disabled={busy !== null || !status?.client}
+          title={status?.client ? undefined : tr("Importa prima un client OAuth (vedi i passi qui sotto)")}
+        >
+          {busy === "login"
+            ? tr("Attendo l'accesso nel browser…")
+            : connected
+              ? tr("Aggiungi un altro account Google")
+              : tr("Accedi con Google")}
+        </button>
+        {connected && <small>{tr("Ogni proprietà usa l'account che può leggerla.")}</small>}
       </div>
       {!connected && status && !status.client && (
         <ol className="steps">
@@ -115,7 +133,7 @@ export function GscSettings({ open }: { open: boolean }) {
             </button>
           </div>
           <div className="key-row">
-            <span className="engine-label">{tr("Usa un service account (file JSON)")}</span>
+            <span className="engine-label">{tr("Aggiungi un service account (file JSON)")}</span>
             <input ref={serviceFile} type="file" accept="application/json,.json" hidden onChange={() => importFile(serviceFile.current, "service")} />
             <button type="button" className="secondary" onClick={() => serviceFile.current?.click()} disabled={busy !== null}>
               {tr("Scegli file…")}

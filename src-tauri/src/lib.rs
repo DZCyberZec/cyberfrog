@@ -309,8 +309,8 @@ async fn gsc_login() -> Result<gsc::Status, String> {
 }
 
 #[tauri::command]
-fn gsc_logout() {
-    gsc::logout()
+fn gsc_logout(account: String) -> Result<gsc::Status, String> {
+    gsc::logout(&account)
 }
 
 /// Imports the OAuth client JSON downloaded from Google Cloud ("Desktop app").
@@ -326,13 +326,18 @@ fn gsc_set_service_account(json: String) -> Result<gsc::Status, String> {
 }
 
 #[tauri::command]
-async fn gsc_sites() -> Result<Vec<gsc::api::Site>, String> {
+async fn gsc_sites() -> Result<gsc::Sites, String> {
     gsc::sites().await
 }
 
 #[tauri::command]
-async fn gsc_query(site: String, start: String, end: String) -> Result<gsc::api::GscData, String> {
-    gsc::query(&site, &start, &end).await
+async fn gsc_query(
+    account: String,
+    site: String,
+    start: String,
+    end: String,
+) -> Result<gsc::api::GscData, String> {
+    gsc::query(&account, &site, &start, &end).await
 }
 
 #[tauri::command]

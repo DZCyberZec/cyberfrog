@@ -1,11 +1,11 @@
 # CyberFrog — roadmap
 
-Cosa manca, in ordine di priorità. Aggiornata al 2026-10-18 (v0.10.0). Ciò che è già fatto è in [HANDOFF.md](HANDOFF.md); com'è costruito in [ARCHITECTURE.md](ARCHITECTURE.md).
+Cosa manca, in ordine di priorità. Aggiornata al 2026-10-19 (v0.11.0). Ciò che è già fatto è in [HANDOFF.md](HANDOFF.md); com'è costruito in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## 1. Prossimi lavori (chiesti dall'utente)
 
-### Google Search Console — fatto in v0.10.0, da completare
-Fatti: login Google (OAuth + PKCE) e service account, report con pagine, CTR basso, "quasi in prima pagina", pagine non trovate dal crawl, query in cannibalizzazione, riscrittura title/meta con AI. Da fare:
+### Google Search Console — fatto in v0.10.0–0.11.0, da completare
+Fatti: login Google (OAuth + PKCE) e service account, più account insieme (v0.11), report con pagine, CTR basso, "quasi in prima pagina", pagine non trovate dal crawl, query in cannibalizzazione, riscrittura title/meta con AI. Da fare:
 - **Client OAuth integrato nella release:** compilare con `CYBERFROG_GOOGLE_CLIENT_ID` e `CYBERFROG_GOOGLE_CLIENT_SECRET`, così chi scarica l'app clicca solo "Accedi con Google".
 - **Verifica dell'app su Google** (pagina privacy, dominio, video demo) per togliere l'avviso "app non verificata" e il limite di 100 utenti.
 - Problemi Search Console nel tab Problemi e nel report per il cliente; dati salvati nel file del crawl e disponibili via MCP.
@@ -17,6 +17,8 @@ L'app controlla le release su GitHub e si aggiorna da sola (plugin updater di Ta
 Il file ha circa 2700 righe: va diviso in `crawler/` con fetch, parse, store, render, robots e checks, senza cambiare il comportamento (i test esistenti fanno da rete).
 
 ## 2. Idee pronte (proposte, non ancora richieste)
+
+- **Ricerca e filtri in tutte le tabelle:** testo libero e filtri numerici (es. citabilità sotto X). Chiesto e poi rimandato dall'utente il 2026-10-19.
 
 - **Tracker AI pianificato:** verifiche settimanali automatiche (launchd, come i crawl pianificati) con notifica quando il sito entra o esce dalle risposte AI.
 - **Più competitor** a confronto, e monitoraggio periodico dei loro nuovi argomenti.

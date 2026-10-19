@@ -4,13 +4,11 @@ import { tr } from "./i18n.ts";
 import { isHtmlPage, nonIndexableReason, type FilterDef, type Page } from "./pages.ts";
 
 /** Mirrors `gsc_status` in src-tauri. `client` is which OAuth client the app can sign in with. */
-export type GscStatus = {
-  connected: boolean;
-  method: "oauth" | "service_account" | null;
-  account: string | null;
-  client: "builtin" | "custom" | null;
-};
-export type GscSite = { site_url: string; permission_level: string };
+/** Mirrors `gsc::Status`, `gsc::SiteOf` and `gsc::Sites` in src-tauri/src/gsc/mod.rs. */
+export type GscAccount = { id: string; method: "oauth" | "service_account"; email: string | null };
+export type GscStatus = { accounts: GscAccount[]; client: "builtin" | "custom" | null };
+export type GscSite = { site_url: string; permission_level: string; account: string; email: string | null };
+export type GscSites = { sites: GscSite[]; failed: string[] };
 export type GscPage = { page: string; clicks: number; impressions: number; ctr: number; position: number };
 export type GscQuery = GscPage & { query: string };
 export type GscData = { pages: GscPage[]; queries: GscQuery[] };

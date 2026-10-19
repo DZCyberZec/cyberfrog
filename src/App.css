@@ -347,6 +347,10 @@ dialog.settings .cli-login .key-row { align-self: stretch; }
 .dot.partial { background: var(--redirect); }
 .dot.closed { background: var(--client); }
 @media (max-width: 1100px) { .geo-site { grid-template-columns: 1fr 1fr; } }
+.geo-site { position: relative; }
+.geo-collapse { position: absolute; top: 2px; right: 16px; font-size: 12px; }
+.geo-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 20px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--bg); font-size: 13px; }
+.geo-strip .spacer { flex: 1; }
 
 /* Topics report: view switch above the table */
 .topics { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -447,6 +451,14 @@ dialog.settings .cli-login .key-row { align-self: stretch; }
 }
 .grid th button:hover { color: var(--text); }
 .grid th .sort { font-size: 9px; color: var(--accent); }
+/* drag handle on each header's right edge; a line shows while hovering or dragging */
+.grid th .resizer {
+  position: absolute; top: 0; right: -4px; z-index: 2; width: 8px; height: 100%;
+  cursor: col-resize; touch-action: none; user-select: none;
+}
+.grid th .resizer::after { content: ""; position: absolute; top: 20%; bottom: 20%; left: 3px; width: 2px; border-radius: 1px; background: var(--border-strong); }
+.grid th .resizer:hover::after, .grid th .resizer.resizing::after { top: 0; bottom: 0; background: var(--accent); }
+.grid th:last-child .resizer { right: 0; }
 .grid td {
   padding: 0 10px; border-bottom: 1px solid var(--border);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -614,3 +626,8 @@ dialog.settings details summary { cursor: pointer; color: var(--muted); }
 dialog.settings .gsc-advanced { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 dialog.settings .key-row .spacer { flex: 1; }
 dialog.settings .engine-label .badge { margin-left: 8px; }
+
+/* Search Console accounts in Settings */
+.gsc-accounts { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; padding: 0; list-style: none; }
+.gsc-accounts li { display: flex; align-items: center; gap: 10px; }
+.gsc-accounts .gsc-email { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

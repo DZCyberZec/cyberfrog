@@ -17,6 +17,7 @@ import {
   type GscData,
   type GscRow,
   type GscSite,
+  type GscSites,
   type GscStatus,
 } from "./gsc";
 import type { Page } from "./pages";
@@ -73,9 +74,17 @@ const cannibalColumns = cannibal.columns([
 
 type View = "pages" | "queries";
 
+// a property is picked together with the account that reads it; ids are hex, so "|" splits them safely
+const siteKey = (s: GscSite) => `${s.account}|${s.site_url}`;
+const splitKey = (key: string) => {
+  const i = key.indexOf("|");
+  return { account: key.slice(0, i), site: key.slice(i + 1) };
+};
+
 export function SearchConsoleReport({ pages, host, aiEngine, aiReady, onOpenSettings, settingsOpen }: Props) {
   const [status, setStatus] = useState<GscStatus | null>(null);
   const [sites, setSites] = useState<GscSite[]>([]);
+  const [failed, setFailed] = useState<string[]>([]);
   const [site, setSite] = useState("");
   const [range, setRange] = useState(() => defaultRange(new Date()));
   const [data, setData] = useState<GscData | null>(null);
@@ -93,22 +102,31 @@ export function SearchConsoleReport({ pages, host, aiEngine, aiReady, onOpenSett
     if (!settingsOpen) refresh();
   }, [settingsOpen, refresh]);
 
-  const connected = status?.connected ?? false;
+  // read the properties again whenever an account is added or removed
+  const accountIds = status?.accounts.map((a) => a.id).join(",") ?? "";
+  const connected = accountIds !== "";
+  const manyAccounts = (status?.accounts.length ?? 0) > 1;
   useEffect(() => {
-    if (!connected) return;
+    if (!accountIds) return;
     let alive = true;
-    invoke<GscSite[]>("gsc_sites").then(
-      (list) => {
+    invoke<GscSites>("gsc_sites").then(
+      ({ sites: list, failed }) => {
         if (!alive) return;
         setSites(list);
-        setSite((cur) => cur || matchProperty(list, host) || "");
+        setFailed(failed);
+        setSite((cur) => {
+          if (cur && list.some((s) => siteKey(s) === cur)) return cur;
+          const url = matchProperty(list, host);
+          const hit = url ? list.find((s) => s.site_url === url) : undefined;
+          return hit ? siteKey(hit) : "";
+        });
       },
       (e) => alive && setError(trError(String(e))),
     );
     return () => {
       alive = false;
     };
-  }, [connected, host]);
+  }, [accountIds, host]);
 
   // numbers fetched for another crawl or property would be matched against the wrong pages
   useEffect(() => {
@@ -122,7 +140,7 @@ export function SearchConsoleReport({ pages, host, aiEngine, aiReady, onOpenSett
     const mine = ++seq.current;
     setLoading(true);
     setError(null);
-    invoke<GscData>("gsc_query", { site, start: range.start, end: range.end }).then(
+    invoke<GscData>("gsc_query", { ...splitKey(site), start: range.start, end: range.end }).then(
       (d) => {
         if (mine !== seq.current) return;
         setData(d);
@@ -176,8 +194,8 @@ export function SearchConsoleReport({ pages, host, aiEngine, aiReady, onOpenSett
             <select value={site} onChange={(e) => setSite(e.currentTarget.value)}>
               <option value="">{tr("Scegli una proprietà…")}</option>
               {sites.map((s) => (
-                <option key={s.site_url} value={s.site_url}>
-                  {s.site_url}
+                <option key={siteKey(s)} value={siteKey(s)}>
+                  {manyAccounts ? `${s.site_url} — ${s.email ?? "Google"}` : s.site_url}
                 </option>
               ))}
             </select>
@@ -198,6 +216,11 @@ export function SearchConsoleReport({ pages, host, aiEngine, aiReady, onOpenSett
           <small className="muted">{tr("Nessuna proprietà corrisponde a {host}: scegline una.", { host })}</small>
         )}
         {error && <p className="error">{error}</p>}
+        {failed.map((f) => (
+          <p key={f} className="error">
+            {tr("Account non leggibile, ricollegalo nelle Impostazioni: {err}", { err: f })}
+          </p>
+        ))}
       </section>
 
       {data && summary && (

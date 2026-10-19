@@ -32,7 +32,7 @@ App desktop **Tauri 2**: un backend **Rust** che scansiona i siti e salva ogni c
 | `ai/` | `mod.rs` (scelta motore, stato connessione, ricerca web), `claude_code.rs`, `codex.rs`, `api.rs` (Messages API), `keychain.rs` (chiave nel Portachiavi) |
 | `schedule.rs` | Crawl pianificati: plist launchd, esecuzione headless, confronto col giro precedente, notifica macOS |
 | `tracker.rs` | Storico del tracker di visibilità AI (`ai_tracker.json`) |
-| `gsc/` | Google Search Console: `oauth.rs` (accesso Google per app desktop: loopback 127.0.0.1 + PKCE + state), `service_account.rs` (JWT RS256 firmato con la chiave del service account), `api.rs` (proprietà e Search Analytics), `mod.rs` (stato, token in memoria) |
+| `gsc/` | Google Search Console: `oauth.rs` (accesso Google per app desktop: loopback 127.0.0.1 + PKCE + state), `service_account.rs` (JWT RS256 firmato con la chiave del service account), `api.rs` (proprietà e Search Analytics), `accounts.rs` (elenco degli account collegati, un elemento del Portachiavi per account, migrazione dalla v0.10), `mod.rs` (stato, token in memoria per account) |
 | `secrets.rs` | Segreti nel Portachiavi (token Google, client OAuth, service account), salvati in esadecimale |
 | `mcp.rs` | Server MCP su stdio: `crawl_site`, `list_crawls`, `crawl_summary`, `query_crawl`, `page_details`, `geo_report`, `topics_report`, `content_gap` |
 
@@ -91,6 +91,8 @@ Lo stato (installato, login fatto) si legge senza spendere token: `claude auth s
 |---|---|---|
 | Login Google (consigliato) | OAuth per app desktop (RFC 8252): CyberFrog apre il browser, Google torna su un listener `127.0.0.1` usa e getta; PKCE S256 e `state` casuale verificati; scope `webmasters.readonly` + `openid email` | refresh token nel Portachiavi; access token solo in memoria |
 | Service account (avanzato) | JWT RS256 firmato con la chiave del file JSON, scambiato con un token (10 minuti) | chiave nel Portachiavi; il file scaricato va cancellato |
+
+**Più account:** l'elemento `accounts` del Portachiavi elenca gli account (id, metodo, email: niente segreti); le credenziali di ognuno stanno in `account-<id>`, con id = primi 8 byte di SHA-256 di metodo + email, così rifare l'accesso con lo stesso account lo sostituisce. `gsc_sites` legge le proprietà di tutti gli account (un account scaduto finisce in `failed` senza nascondere gli altri) e `gsc_query` riceve l'id dell'account; dalla webview arrivano solo id esadecimali di 16 cifre, verificati prima di toccare il Portachiavi. La connessione singola della v0.10 viene spostata nell'elenco alla prima lettura.
 
 **Client OAuth:** le build di release lo includono da variabili d'ambiente al momento della compilazione (`CYBERFROG_GOOGLE_CLIENT_ID`, `CYBERFROG_GOOGLE_CLIENT_SECRET`), mai nel repository; in alternativa l'utente importa il JSON "App desktop" scaricato da Google Cloud. Per le app desktop il "secret" di Google non è confidenziale (RFC 8252 §8.5): la sicurezza viene da PKCE e dal redirect locale.
 

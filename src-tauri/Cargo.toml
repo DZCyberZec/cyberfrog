@@ -1,6 +1,6 @@
 [package]
 name = "cyberfrog"
-version = "0.10.0"
+version = "0.11.0"
 description = "CyberFrog – Another SEO Tool: desktop SEO crawler"
 authors = ["Daniele Zecca – CyberZec <https://cyberzec.it>"]
 license = "Apache-2.0"

@@ -27,7 +27,7 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
 }
 
 /// Service and account are our own constants; refusing anything else keeps the command line fixed.
-fn plain(name: &str) -> bool {
+pub(crate) fn plain(name: &str) -> bool {
     !name.is_empty()
         && name
             .chars()

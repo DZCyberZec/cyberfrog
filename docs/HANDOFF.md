@@ -2,7 +2,7 @@
 
 Documento per riprendere il lavoro in una nuova chat: chiedi di leggere `docs/HANDOFF.md`, poi [ARCHITECTURE.md](ARCHITECTURE.md) (com'è fatto) e [ROADMAP.md](ROADMAP.md) (cosa manca).
 
-Ultimo aggiornamento: 2026-10-18 (v0.10.0).
+Ultimo aggiornamento: 2026-10-19 (v0.11.0).
 
 ## Cos'è
 
@@ -25,7 +25,7 @@ CyberFrog – Another SEO Tool: crawler SEO e GEO desktop di Daniele Zecca (Cybe
 
 Dettagli di moduli, dati, motori AI e sicurezza: [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Dove siamo (v0.10.0)
+## Dove siamo (v0.11.0)
 
 | Versione | Funzionalità |
 |---|---|
@@ -38,12 +38,12 @@ Dettagli di moduli, dati, motori AI e sicurezza: [ARCHITECTURE.md](ARCHITECTURE.
 | 0.7.0 | Rifacimento UX: schermata iniziale, Riepilogo con salute SEO 0–100, header con menu ⋯, ricerca ⌘K; `App.tsx` diviso in componenti |
 | 0.8.0 | Report "Argomenti e link": cluster, cannibalizzazione, link interni da aggiungere (TF-IDF locale) |
 | 0.9.0 | **Competitor** (confronto su 13 indicatori, argomenti mancanti ed esclusivi, azioni per superarlo, piano AI); **tracker AI** (l'AI con ricerca web ti cita? in che posizione? chi cita al posto tuo? con storico); **Codex** come terzo motore AI, con stato di connessione e passaggi per collegare ogni motore; **report per il cliente** (HTML da stampare in PDF); **generatori** di llms.txt e schema FAQ; **aiuto "?"** su ogni report; **MCP** con `geo_report`, `topics_report`, `content_gap` |
-
 | 0.10.0 | **Accesso a Claude Code e Codex dalle Impostazioni** (pulsante "Accedi", senza Terminale, stato aggiornato da solo); **Google Search Console:** accesso Google (OAuth + PKCE, token nel Portachiavi) o service account (opzione avanzata); report con clic, impressioni, CTR e posizione per pagina accanto al crawl, filtri CTR basso / quasi in prima pagina / non trovate dal crawl / senza impressioni, query in cannibalizzazione, riscrittura title e meta con AI |
+| 0.11.0 | **Più account Google** per Search Console (login Google e service account insieme; ogni proprietà usa l'account che la legge, scelta automatica per il sito del crawl); **colonne ridimensionabili** in tutte le tabelle (trascina il bordo, doppio clic adatta al testo, larghezze ricordate per report) con scroll orizzontale; **riepilogo GEO comprimibile** in una riga |
 
 **Verificato dal vivo su cyberzec.it:** salute SEO 82/100, citabilità media 87/100, tutti i crawler AI aperti, llms.txt valido, 8 cluster, 3 casi di cannibalizzazione, 12 link da aggiungere. Claude Code (account Claude Pro) e Codex sono collegati e provati dal vivo; il tracker trova cyberzec.it citato al 1° posto con Claude e al 2° con Codex per "consulenza cybersecurity PMI Senigallia", mentre per "migliori consulenti SEO Marche" l'AI cita solo altri siti.
 
-**Test:** 56 test Rust, `scripts/pages.check.ts`, clippy senza avvisi.
+**Test:** 59 test Rust, `scripts/pages.check.ts`, clippy senza avvisi.
 
 Cosa manca e cosa va ancora verificato dal vivo: [ROADMAP.md](ROADMAP.md).
 

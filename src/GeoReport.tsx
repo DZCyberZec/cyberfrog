@@ -1,9 +1,17 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { DataTable, helperFor } from "./DataTable";
 import { LOCALE, tr } from "./i18n";
 import { botState, geoFilters, PURPOSE_LABEL, type GeoData, type GeoRow } from "./geo";
 
 const row = helperFor<GeoRow>();
+const COLLAPSED_KEY = "cyberfrog.geo.collapsed";
+const readCollapsed = () => {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
 const scoreKind = (n: number) => (n >= 70 ? "ok" : n >= 50 ? "redirect" : "client");
 const columns = row.columns([
   row.accessor("url", { header: "URL", size: 420 }),
@@ -37,17 +45,56 @@ type Props = {
 export function GeoReport({ geo, rows, htmlPages, onGenerateLlms, ...table }: Props) {
   const filters = useMemo(() => geoFilters(geo), [geo]);
   const average = rows.length ? Math.round(rows.reduce((s, r) => s + r.score, 0) / rows.length) : null;
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  function toggle() {
+    setCollapsed(!collapsed);
+    try {
+      localStorage.setItem(COLLAPSED_KEY, collapsed ? "0" : "1");
+    } catch {
+      // not remembered, still works
+    }
+  }
   if (geo.bots.length === 0) {
     return <p className="empty">{tr("Questo crawl è stato fatto con una versione precedente: avvia un nuovo crawl per l'analisi GEO.")}</p>;
+  }
+  const scoreBadge =
+    average === null ? "–" : <span className={`badge ${scoreKind(average)}`}>{average} / 100</span>;
+  if (collapsed) {
+    const open = geo.bots.filter((b) => botState(b, htmlPages) === "open").length;
+    return (
+      <div className="geo">
+        <section className="geo-strip" aria-label={tr("Sito")}>
+          <span>
+            {tr("Citabilità media")} {scoreBadge}
+          </span>
+          <span>{tr("Crawler AI aperti: {n} su {total}", { n: open, total: geo.bots.length })}</span>
+          <span>
+            llms.txt{" "}
+            {geo.llms?.check ? (
+              <span className={`badge ${geo.llms.check.issues.length ? "redirect" : "ok"}`}>{tr("Presente")}</span>
+            ) : (
+              <span className="badge blocked">{tr("Assente")}</span>
+            )}
+          </span>
+          <span>Content-Signal: {geo.content_signals.length ? tr("Dichiarato") : tr("Non dichiarato")}</span>
+          <span className="spacer" />
+          <button type="button" className="link" onClick={toggle} aria-expanded={false}>
+            {tr("Mostra riepilogo")}
+          </button>
+        </section>
+        <DataTable data={rows} columns={columns} filters={filters} {...table} />
+      </div>
+    );
   }
   return (
     <div className="geo">
       <section className="geo-site" aria-label={tr("Sito")}>
+        <button type="button" className="link geo-collapse" onClick={toggle} aria-expanded>
+          {tr("Comprimi riepilogo")}
+        </button>
         <div className="geo-card">
           <h3>{tr("Citabilità media")}</h3>
-          <p className="geo-big">
-            {average === null ? "–" : <span className={`badge ${scoreKind(average)}`}>{average} / 100</span>}
-          </p>
+          <p className="geo-big">{scoreBadge}</p>
           <small>{tr("Su {n} pagine indicizzabili. Clic su una pagina per i dettagli.", { n: rows.length.toLocaleString(LOCALE) })}</small>
         </div>
         <div className="geo-card wide">

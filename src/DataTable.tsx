@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
+  columnResizingFeature,
   columnSizingFeature,
   createColumnHelper,
   createSortedRowModel,
@@ -18,9 +19,46 @@ import { toCsv, type FilterDef } from "./pages";
 import { tr } from "./i18n";
 
 const ROW_HEIGHT = 30;
+/** Bounds for a column the user widens or auto-fits. */
+const MIN_WIDTH = 60;
+const MAX_WIDTH = 1600;
+/** Rows looked at when auto-fitting a column: enough for a fair width, cheap on big crawls. */
+const FIT_SAMPLE = 3000;
+
+type Sizes = Record<string, number>;
+
+// Widths are remembered per set of columns, so each report keeps the layout the user chose.
+const sizesKey = (ids: string[]) => `cyberfrog.columns.${ids.join(",")}`;
+function loadSizes(key: string): Sizes {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+function saveSizes(key: string, sizes: Sizes) {
+  try {
+    localStorage.setItem(key, JSON.stringify(sizes));
+  } catch {
+    // storage full or blocked: widths simply aren't remembered
+  }
+}
+
+/** Width that shows the longest text in the column, measured with the table's font. */
+export function fitWidth(texts: string[], font: string): number {
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return MIN_WIDTH;
+  ctx.font = font;
+  let widest = 0;
+  for (const t of texts) widest = Math.max(widest, ctx.measureText(t).width);
+  // cell padding (2 × 10px) plus room for a badge's own padding
+  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.ceil(widest) + 36));
+}
 
 export const features = tableFeatures({
   columnSizingFeature,
+  columnResizingFeature,
   rowSortingFeature,
   sortedRowModel: createSortedRowModel(),
   sortFns: { alphanumeric: sortFn_alphanumeric, text: sortFn_text },
@@ -63,8 +101,27 @@ export function DataTable<T extends RowData>({
   const active = filters?.find((f) => f.id === filterId);
   const shown = useMemo(() => (active ? data.filter(active.test) : data), [data, active]);
 
-  const table = useTable({ features, columns, data: shown });
+  const key = sizesKey(columns.map((c) => String(c.id ?? (c as { accessorKey?: string }).accessorKey ?? c.header)));
+  const table = useTable({
+    features,
+    columns,
+    data: shown,
+    columnResizeMode: "onChange",
+    initialState: { columnSizing: loadSizes(key) },
+  });
   const rows = table.getRowModel().rows;
+  const sizing = table.state.columnSizing;
+  useEffect(() => saveSizes(key, sizing), [key, sizing]);
+
+  function fit(columnId: string) {
+    const column = table.getColumn(columnId);
+    const cell = scrollRef.current?.querySelector("td, th");
+    if (!column || !cell) return;
+    const texts = rows.slice(0, FIT_SAMPLE).map((r) => String(r.getValue(columnId) ?? ""));
+    texts.push(String(column.columnDef.header ?? ""));
+    const width = fitWidth(texts, getComputedStyle(cell).font);
+    table.setColumnSizing((s) => ({ ...s, [columnId]: width }));
+  }
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -128,6 +185,16 @@ export function DataTable<T extends RowData>({
                         {{ asc: "▲", desc: "▼" }[h.column.getIsSorted() as string] ?? ""}
                       </span>
                     </button>
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={tr("Trascina per allargare la colonna, doppio clic per adattarla al contenuto")}
+                      title={tr("Trascina per allargare la colonna, doppio clic per adattarla al contenuto")}
+                      className={`resizer${h.column.getIsResizing() ? " resizing" : ""}`}
+                      onMouseDown={h.getResizeHandler()}
+                      onTouchStart={h.getResizeHandler()}
+                      onDoubleClick={() => fit(h.column.id)}
+                    />
                   </th>
                 ))}
               </tr>

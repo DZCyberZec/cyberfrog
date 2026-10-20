@@ -665,11 +665,34 @@ export function withExamples(issues: Issue[], d: CrawlSnapshot, dups: DupPage[] 
   });
 }
 
-/** The rows behind one issue (pages, images, links…), as its report lists them. */
-export function issueRows(issue: IssueDef, d: CrawlSnapshot, dups: DupPage[] = []): Record<string, unknown>[] {
-  const report = crawlReports(d, dups)[issue.tab];
+function rowsOf(reports: Reports, issue: IssueDef): Record<string, unknown>[] {
+  const report = reports[issue.tab];
   const filter = report?.filters.find((f) => f.id === issue.filter);
   return filter ? report.rows.filter(filter.test) : [];
+}
+
+/** The rows behind one issue (pages, images, links…), as its report lists them. */
+export function issueRows(issue: IssueDef, d: CrawlSnapshot, dups: DupPage[] = []): Record<string, unknown>[] {
+  return rowsOf(crawlReports(d, dups), issue);
+}
+
+/** The URL (or image, or link source) a report row is about. */
+export const rowLabel = (r: Record<string, unknown>) => String(r.url ?? r.page ?? r.source ?? r.src ?? "");
+
+/** The one value that shows the problem on that row: the duplicated text, the title, what is missing… */
+export function rowDetail(r: Record<string, unknown>): string {
+  const detail = r.value ?? r.title ?? r.meta_description ?? r.h1 ?? r.anchor ?? r.reason ?? (Array.isArray(r.missing) ? r.missing.join(" · ") : null);
+  return typeof detail === "string" ? detail : "";
+}
+
+/** Every issue with every item behind it, one line each, for a single export: priority, issue, report, fix, URL, detail. */
+export function issueDetails(issues: Issue[], d: CrawlSnapshot, dups: DupPage[], reportLabel: (tab: string) => string): string[][] {
+  const reports = crawlReports(d, dups);
+  return issues.flatMap((i) => {
+    const head = [tr(i.priority), i.label, reportLabel(i.tab), i.fix];
+    const rows = rowsOf(reports, i);
+    return rows.length ? rows.map((r) => [...head, rowLabel(r), rowDetail(r)]) : [[...head, "", ""]];
+  });
 }
 
 function crawlReports(d: CrawlSnapshot, dups: DupPage[]): Reports {

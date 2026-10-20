@@ -9,7 +9,7 @@ const {
   REDIRECT_FILTERS, redirectChains, siteTree, depthCounts, JS_FILTERS,
 } = await import("../src/pages.ts");
 const { hasTranslation } = await import("../src/i18n.ts");
-const { pageIssues, withExamples } = await import("../src/pages.ts");
+const { pageIssues, withExamples, issueDetails } = await import("../src/pages.ts");
 const { systemPrompt, metaPrompt, explainPrompt, planPrompt, fixPrompt } = await import("../src/ai.ts");
 const { healthScore } = await import("../src/health.ts");
 const { TOPIC_FILTERS, topicFindings, REASON_LABEL } = await import("../src/topics.ts");
@@ -532,4 +532,17 @@ console.log("pages.check: ok");
   assert.ok(!text.includes("\n\n\n"));
 }
 console.log("fixPrompt: ok");
+
+// issueDetails: one line per affected item, with the issue's fix and the item's URL
+{
+  const d = snap([{ ...base, url: "https://x.it/", title: null }, { ...base, url: "https://x.it/b", title: "A fine and long enough title here" }]);
+  const lines = issueDetails(allIssues(d, []), d, [], (t: string) => `report:${t}`);
+  const missing = lines.find((l: string[]) => l[1] === "Title mancante");
+  assert.ok(missing, "missing title is exported");
+  assert.equal(missing[2], "report:title");
+  assert.equal(missing[4], "https://x.it/");
+  assert.ok(missing[3].length > 0, "fix text is exported");
+  assert.ok(!lines.some((l: string[]) => l[1] === "Title mancante" && l[4] === "https://x.it/b"));
+}
+console.log("issueDetails: ok");
 

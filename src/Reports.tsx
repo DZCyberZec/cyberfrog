@@ -1,5 +1,7 @@
 // The report area: the table (or view) of the chosen report, and the detail panel of the selected URL.
 import { useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 import { DataTable, helperFor } from "./DataTable";
 import { DetailPanel } from "./DetailPanel";
 import { ImagePanel } from "./ImagePanel";
@@ -17,7 +19,7 @@ import { FixPage, issueKey } from "./FixPage";
 import type { Settings } from "./settings";
 import type { CrawlData, CrawlSummary } from "./crawl";
 import type { Analysis } from "./useAnalysis";
-import type { Tab } from "./nav";
+import { TABS, type Tab } from "./nav";
 import { LOCALE, tr } from "./i18n";
 import {
   EXTERNAL_FILTERS,
@@ -59,7 +61,9 @@ import {
   hreflangPages,
   indexFilters,
   metaRows,
+  issueDetails,
   pageIssues,
+  toCsv,
   redirectChains,
   schemaFilters,
   schemaPages,
@@ -114,6 +118,22 @@ export function Reports(p: Props) {
     isSelected: (r: { url: string }) => r.url === selected,
   };
   const name = (suffix: string) => `${a.host}-${suffix}`;
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  /** One CSV with every issue and every page, image or link behind it, instead of one export per report. */
+  async function exportAllIssues() {
+    setExportMsg(null);
+    const path = await save({ defaultPath: `${name("problemi-dettaglio")}.csv`, filters: [{ name: "CSV", extensions: ["csv"] }] });
+    if (!path) return;
+    const label = (tab: string) => TABS.find((t) => t.id === tab)?.label ?? tab;
+    const rows = issueDetails(a.issues, a.snapshot, a.dupRows, label);
+    const header = [tr("Priorità"), tr("Problema"), tr("Report"), tr("Cosa fare"), "URL", tr("Dettaglio")];
+    try {
+      await invoke("write_text_file", { path, contents: toCsv(header, rows) });
+      setExportMsg(tr("Esportate {n} righe", { n: rows.length }));
+    } catch (err) {
+      setExportMsg(tr("Esportazione non riuscita: {err}", { err: String(err) }));
+    }
+  }
 
   const metaTab = metaTabs.find((t) => t.check.field === tab);
   const metaTable = useMemo(() => (metaTab ? metaRows(pages, metaTab.check.field) : []), [pages, metaTab]);
@@ -215,15 +235,31 @@ export function Reports(p: Props) {
           columns={issueTableColumns}
           exportName={name("problemi")}
           actions={
-            <button
-              type="button"
-              className="secondary"
-              disabled={!p.aiReady || a.issues.length === 0 || plan.state.status === "loading"}
-              title={p.aiReady ? undefined : tr(NO_KEY_TEXT)}
-              onClick={() => plan.run(planPrompt(a.host, pages, withExamples(a.issues, a.snapshot, a.dupRows)))}
-            >
-              {tr("Piano d'azione AI")}
-            </button>
+            <>
+              {exportMsg && (
+                <span className="export-msg" role="status">
+                  {exportMsg}
+                </span>
+              )}
+              <button
+                type="button"
+                className="secondary"
+                disabled={a.issues.length === 0}
+                title={tr("Un solo CSV con ogni problema, le pagine coinvolte e cosa fare")}
+                onClick={exportAllIssues}
+              >
+                {tr("Esporta tutto con dettagli")}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={!p.aiReady || a.issues.length === 0 || plan.state.status === "loading"}
+                title={p.aiReady ? undefined : tr(NO_KEY_TEXT)}
+                onClick={() => plan.run(planPrompt(a.host, pages, withExamples(a.issues, a.snapshot, a.dupRows)))}
+              >
+                {tr("Piano d'azione AI")}
+              </button>
+            </>
           }
           onRowClick={(i) => p.go(i.tab as Tab, i.filter)}
         />

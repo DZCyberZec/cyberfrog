@@ -2,7 +2,7 @@
 
 Documento per riprendere il lavoro in una nuova chat: chiedi di leggere `docs/HANDOFF.md`, poi [ARCHITECTURE.md](ARCHITECTURE.md) (com'è fatto) e [ROADMAP.md](ROADMAP.md) (cosa manca).
 
-Ultimo aggiornamento: 2026-10-20 (v0.12.1).
+Ultimo aggiornamento: 2026-10-20 (v0.12.2).
 
 ## Cos'è
 
@@ -25,7 +25,7 @@ CyberFrog – Another SEO Tool: crawler SEO e GEO desktop di Daniele Zecca (Cybe
 
 Dettagli di moduli, dati, motori AI e sicurezza: [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Dove siamo (v0.12.1)
+## Dove siamo (v0.12.2)
 
 | Versione | Funzionalità |
 |---|---|
@@ -43,6 +43,7 @@ Dettagli di moduli, dati, motori AI e sicurezza: [ARCHITECTURE.md](ARCHITECTURE.
 | 0.11.1 | Ogni account Google può avere un **client OAuth dedicato** (es. il progetto Google Cloud di un cliente) e conserva quello con cui ha fatto l'accesso; barre di scorrimento sempre visibili; pulsante "Comprimi riepilogo" GEO più leggibile |
 | 0.12.0 | **"Risolvi con AI"** su ogni riga dei Problemi: l'AI scrive la correzione pronta per le pagine coinvolte (fino a 15, con i loro dati); **pannello dettaglio ridimensionabile** trascinando il bordo in alto (misura ricordata, doppio clic per tornare a quella iniziale) e con intestazione colorata |
 | 0.12.1 | **Pagina "Risolvi con AI"** nella barra laterale (Panoramica): scegli il problema e le pagine, vedi cosa farà, la richiesta esatta e la stima dei token prima di avviare; il pulsante nei Problemi apre questa pagina invece di partire subito |
+| 0.12.2 | **Nessuna richiesta AI parte al buio:** ogni pulsante AI (piano d'azione, title/meta, spiega problemi, competitor, Search Console, tracker) mostra prima motore, token stimati, costo e richiesta completa, poi "Avvia la richiesta"; **"Esporta tutto con dettagli"** nei Problemi: un CSV con ogni problema, ogni pagina coinvolta, il dettaglio e cosa fare |
 
 **Verificato dal vivo su cyberzec.it:** salute SEO 82/100, citabilità media 87/100, tutti i crawler AI aperti, llms.txt valido, 8 cluster, 3 casi di cannibalizzazione, 12 link da aggiungere. Claude Code (account Claude Pro) e Codex sono collegati e provati dal vivo; il tracker trova cyberzec.it citato al 1° posto con Claude e al 2° con Codex per "consulenza cybersecurity PMI Senigallia", mentre per "migliori consulenti SEO Marche" l'AI cita solo altri siti.
 

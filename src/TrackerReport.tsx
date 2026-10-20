@@ -2,7 +2,7 @@
 // where, and who it cites instead. Checks run one question at a time; history is saved per site.
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { NO_KEY_TEXT } from "./AiAssist";
+import { ENGINE_LABEL, NO_KEY_TEXT, costText } from "./AiAssist";
 import { LOCALE, tr, trError } from "./i18n";
 import type { AiEngine } from "./settings";
 import {
@@ -31,6 +31,8 @@ export function TrackerReport({ host, engine, aiReady, suggestions }: Props) {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  /** "Verifica ora" first shows what it will cost; the check starts from there. */
+  const [confirming, setConfirming] = useState(false);
   const site = data.sites?.[host] ?? EMPTY;
 
   useEffect(() => {
@@ -118,13 +120,44 @@ export function TrackerReport({ host, engine, aiReady, suggestions }: Props) {
             <button
               type="button"
               className="go"
-              onClick={check}
-              disabled={!aiReady || !!progress || !parseQueries(draft).length}
+              onClick={() => setConfirming(true)}
+              disabled={!aiReady || !!progress || confirming || !parseQueries(draft).length}
               title={aiReady ? undefined : tr(NO_KEY_TEXT)}
             >
               {progress ? tr("Verifica {d}/{t}…", { d: progress.done + 1, t: progress.total }) : tr("Verifica ora")}
             </button>
           </div>
+          {confirming && (
+            <div className="ai-out ai-preview">
+              <strong>{tr("Prima di avviare")}</strong>
+              <dl className="fix-est">
+                <dt>{tr("Richieste AI")}</dt>
+                <dd>{tr("{n}, una per domanda, con ricerca web", { n: parseQueries(draft).length })}</dd>
+                <dt>{tr("Motore")}</dt>
+                <dd>{ENGINE_LABEL[engine]}</dd>
+                <dt>{tr("Costo")}</dt>
+                <dd>{costText(engine)}</dd>
+              </dl>
+              <small className="muted">
+                {tr("La ricerca web fa leggere all'AI le pagine trovate: ogni domanda usa di solito alcune migliaia di token. Con la chiave API la ricerca web ha anche un costo per ricerca.")}
+              </small>
+              <div className="fix-actions">
+                <button
+                  type="button"
+                  className="go"
+                  onClick={() => {
+                    setConfirming(false);
+                    check();
+                  }}
+                >
+                  {tr("Avvia la verifica")}
+                </button>
+                <button type="button" className="link" onClick={() => setConfirming(false)}>
+                  {tr("Annulla")}
+                </button>
+              </div>
+            </div>
+          )}
           {error && <p className="error">{error}</p>}
         </section>
 

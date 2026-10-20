@@ -1,6 +1,6 @@
 # CyberFrog — roadmap
 
-Cosa manca, in ordine di priorità. Aggiornata al 2026-10-20 (v0.12.1). Ciò che è già fatto è in [HANDOFF.md](HANDOFF.md); com'è costruito in [ARCHITECTURE.md](ARCHITECTURE.md).
+Cosa manca, in ordine di priorità. Aggiornata al 2026-10-20 (v0.12.2). Ciò che è già fatto è in [HANDOFF.md](HANDOFF.md); com'è costruito in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## 1. Prossimi lavori (chiesti dall'utente)
 

@@ -675,3 +675,6 @@ dialog.settings .engine-label .badge { margin-left: 8px; }
 .fix-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .fix-prompt { max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 10px 12px; font-size: 12px; white-space: pre-wrap; background: var(--sunken); border-radius: var(--radius); }
 .fix-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.ai-preview { display: flex; flex-direction: column; gap: 8px; }
+.ai-preview .fix-est { margin: 0; }
+.ai-preview .fix-actions { margin-top: 2px; }

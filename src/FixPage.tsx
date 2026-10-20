@@ -1,10 +1,10 @@
 // "Risolvi con AI": pick an issue, see exactly what would be sent and roughly how many tokens it
 // costs, choose the pages, and only then start the request.
 import { useEffect, useMemo, useState } from "react";
-import { AiOutput, NO_KEY_TEXT, type AiState } from "./AiAssist";
+import { AiOutput, ENGINE_LABEL, NO_KEY_TEXT, costText, type AiState } from "./AiAssist";
 import { FIX_ITEMS, estimateTokens, fixPrompt, systemPrompt } from "./ai";
 import { LOCALE, tr } from "./i18n";
-import { issueRows, type CrawlSnapshot, type DupPage, type Issue, type Page } from "./pages";
+import { issueRows, rowDetail, rowLabel, type CrawlSnapshot, type DupPage, type Issue, type Page } from "./pages";
 import type { AiEngine } from "./settings";
 
 /** Rows listed to pick from; the rest wait for a later round. */
@@ -14,12 +14,6 @@ const ANSWER_PER_ITEM = 180;
 const ANSWER_BASE = 150;
 
 export const issueKey = (i: Pick<Issue, "tab" | "filter">) => `${i.tab}:${i.filter}`;
-
-const ENGINE_LABEL: Record<AiEngine, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  api: tr("API Anthropic"),
-};
 
 type Props = {
   issues: Issue[];
@@ -31,13 +25,7 @@ type Props = {
   aiReady: boolean;
   /** Issue chosen in the Issues tab, if any. */
   initial: string | null;
-  ai: { state: AiState; run: (prompt: string) => void; reset: () => void };
-};
-
-const rowLabel = (r: Record<string, unknown>) => String(r.url ?? r.page ?? r.source ?? r.src ?? "");
-const rowDetail = (r: Record<string, unknown>) => {
-  const detail = r.value ?? r.title ?? r.meta_description ?? r.h1 ?? r.anchor ?? r.reason ?? (Array.isArray(r.missing) ? r.missing.join(" · ") : null);
-  return typeof detail === "string" ? detail : "";
+  ai: { state: AiState; start: (prompt: string) => void };
 };
 
 export function FixPage({ issues, snapshot, dupRows, pages, host, engine, aiReady, initial, ai }: Props) {
@@ -114,7 +102,7 @@ export function FixPage({ issues, snapshot, dupRows, pages, host, engine, aiRead
                 <dt>{tr("Motore")}</dt>
                 <dd>{ENGINE_LABEL[engine]}</dd>
                 <dt>{tr("Costo")}</dt>
-                <dd>{engine === "api" ? tr("A consumo sulla tua chiave API Anthropic") : tr("Incluso nell'abbonamento: usa la quota del piano")}</dd>
+                <dd>{costText(engine)}</dd>
               </dl>
               <small className="muted">{tr("Stima indicativa: il conteggio reale dipende dal modello e dalla lunghezza della risposta.")}</small>
             </section>
@@ -154,7 +142,7 @@ export function FixPage({ issues, snapshot, dupRows, pages, host, engine, aiRead
                 disabled={!aiReady || selected.length === 0 || running}
                 onClick={() => {
                   setRanFor(issue.label);
-                  ai.run(prompt);
+                  ai.start(prompt); // this page is the preview
                 }}
               >
                 {running ? tr("Claude sta scrivendo…") : tr("Avvia la correzione")}

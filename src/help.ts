@@ -13,6 +13,11 @@ export const HELP: Record<string, { what: string; read: string; act: string }> =
     read: tr("Alta: impedisce a pagine di essere trovate o indicizzate (errori 4xx/5xx, link rotti, title mancante). Media: costa posizionamento. Bassa: rifinitura. La colonna URL dice quante pagine sono interessate."),
     act: tr("Lavora dall'alto: prima le Alta, poi le Media. Un clic sulla riga apre il report già filtrato sulle pagine da correggere. «Piano d'azione AI» ne ricava un piano (serve l'AI configurata nelle Impostazioni)."),
   },
+  fix: {
+    what: tr("Fa scrivere all'AI le correzioni pronte da usare per un problema del crawl, dopo averti mostrato cosa invia e quanto costa."),
+    read: tr("Scegli il problema e spunta le pagine (fino a 15 per richiesta). «Cosa farà» riassume la richiesta, «Stima» indica i token inviati e quelli attesi in risposta (stima indicativa) e il motore usato. «Mostra la richiesta completa» apre il testo esatto che parte."),
+    act: tr("Premi «Avvia la correzione» solo quando l'anteprima ti convince, poi copia le correzioni e applicale sul sito. Per i problemi con molte pagine fai più giri, poi rifai il crawl per verificare."),
+  },
   compare: {
     what: tr("Confronta questo crawl con uno precedente dello stesso sito: pagine nuove o rimosse, e cosa è cambiato in stato, indicizzabilità, title, meta description, H1, canonical e problemi."),
     read: tr("Scegli il crawl di riferimento dal menu «Confronta con». Ogni riga è una differenza, con il valore prima e dopo; la riga Problema mostra come cambia il numero di URL di quel problema. I filtri isolano un tipo di cambiamento."),

@@ -656,3 +656,22 @@ dialog.settings .engine-label .badge { margin-left: 8px; }
 .gsc-accounts { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; padding: 0; list-style: none; }
 .gsc-accounts li { display: flex; align-items: center; gap: 10px; }
 .gsc-accounts .gsc-email { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Risolvi con AI: preview before the request */
+.fix h2, .fix h3 { margin: 0 0 8px; }
+.fix h3 .muted { font-size: 13px; font-weight: 500; margin-left: 6px; }
+.fix-pick { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-weight: 600; }
+.fix-pick select { max-width: 100%; padding: 7px 8px; font: inherit; font-weight: 400; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); }
+.fix-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.fix-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.fix-est { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 8px; }
+.fix-est dt { color: var(--muted); }
+.fix-est dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fix-items { max-height: 320px; overflow-y: auto; margin: 8px 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius); }
+.fix-items li { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.fix-items li:last-child { border-bottom: 0; }
+.fix-items .check { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fix-url { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fix-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.fix-prompt { max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 10px 12px; font-size: 12px; white-space: pre-wrap; background: var(--sunken); border-radius: var(--radius); }
+.fix-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }

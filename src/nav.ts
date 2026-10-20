@@ -7,6 +7,7 @@ export type Tab =
   | "competitor"
   | "gsc"
   | "issues"
+  | "fix"
   | "compare"
   | "internal"
   | "codes"
@@ -35,6 +36,7 @@ export const GROUPS: { label: string; items: { id: Tab; label: string }[] }[] = 
     items: [
       { id: "overview", label: tr("Riepilogo") },
       { id: "issues", label: tr("Problemi") },
+      { id: "fix", label: tr("Risolvi con AI") },
       { id: "compare", label: tr("Confronto") },
       { id: "competitor", label: tr("Competitor") },
       { id: "gsc", label: tr("Search Console") },

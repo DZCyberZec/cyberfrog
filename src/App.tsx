@@ -66,7 +66,7 @@ export default function App() {
   const listCount = countUrls(listText);
   const hasCrawl = crawl.pages.length > 0;
   // duplicates compare every pair of pages, so only where they're shown
-  const a = useAnalysis(crawl, tab === "duplicates" || tab === "issues");
+  const a = useAnalysis(crawl, tab === "duplicates" || tab === "issues" || tab === "fix");
 
   const refreshAi = useCallback(() => {
     invoke<AiStatus>("ai_status").then(setAiStatus, () => setAiStatus(NO_AI));

@@ -52,7 +52,7 @@ Regola: la **logica sta in file `.ts` puri e testati** (`scripts/pages.check.ts`
 | `health.ts`, `geo.ts`, `topics.ts`, `competitor.ts`, `tracker.ts`, `gsc.ts`, `llms.ts`, `clientReport.ts`, `ai.ts` | Logica pura per salute, GEO, argomenti, competitor, tracker AI, llms.txt, report per il cliente, prompt AI (pagina, piano d'azione, "Risolvi con AI" per problema) |
 | `Overview.tsx`, `GeoReport.tsx`, `TopicsReport.tsx`, `CompetitorReport.tsx`, `TrackerReport.tsx`, `SearchConsoleReport.tsx`, `SiteStructure.tsx` | Viste dei report speciali |
 | `DataTable.tsx`, `columns.tsx` | Tabella generica (filtri, ordinamento, virtualizzazione, CSV) e colonne di tutte le tabelle |
-| `DetailPanel.tsx`, `ImagePanel.tsx`, `PanelResizer.tsx`, `FaqSchema.tsx`, `AiAssist.tsx` | Pannelli di dettaglio (altezza trascinabile, ricordata), generatore FAQ, output AI |
+| `DetailPanel.tsx`, `ImagePanel.tsx`, `PanelResizer.tsx`, `FixPage.tsx`, `FaqSchema.tsx`, `AiAssist.tsx` | Pannelli di dettaglio (altezza trascinabile, ricordata), pagina "Risolvi con AI" (anteprima e stima token prima della richiesta), generatore FAQ, output AI |
 | `SettingsDialog.tsx`, `AiSettings.tsx`, `GscSettings.tsx`, `ListDialog.tsx`, `SchedulesDialog.tsx` | Dialoghi |
 | `CrawlForm.tsx`, `StartScreen.tsx`, `Menu.tsx`, `CommandPalette.tsx`, `HelpButton.tsx` + `help.ts`, `icons.tsx` | Elementi d'interfaccia |
 | `i18n.ts` | Testi italiani come chiavi, dizionario inglese, `tr()` e `trError()` |

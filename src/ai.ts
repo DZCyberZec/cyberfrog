@@ -90,7 +90,7 @@ export function planPrompt(host: string, pages: Page[], issues: (Issue & { examp
 }
 
 /** Items sent with one "fix it" request, and how much of each non-page row; bounds the prompt. */
-const FIX_ITEMS = 15;
+export const FIX_ITEMS = 15;
 const ROW_CHARS = 600;
 
 /** Asks for the ready-to-use fix of one issue, item by item. */
@@ -109,10 +109,13 @@ export function fixPrompt(host: string, issue: Issue, rows: Record<string, unkno
     "character count, alt text, H1, redirect rule, JSON-LD, an internal link with its anchor text and where to put it, and so on).",
     "When the fix can't be written as text (compressing an image, a server setting), give the exact steps.",
     "Write in the language of each page's own content for any text meant for the page.",
-    issue.count > FIX_ITEMS ? `Only the first ${FIX_ITEMS} of ${issue.count} items are listed: end with how to apply the same fix to the rest.` : "",
+    items.length < issue.count ? `Only ${items.length} of ${issue.count} items are listed: end with how to apply the same fix to the rest.` : "",
     "",
     ...items.flatMap((t) => [t, ""]),
   ]
     .filter((line, i, all) => line !== "" || all[i - 1] !== "")
     .join("\n");
 }
+
+/** Rough token count of a text, for the estimate shown before a request: ~3.5 characters per token. */
+export const estimateTokens = (text: string) => Math.ceil(text.length / 3.5);

@@ -12,7 +12,8 @@ import { SiteStructure } from "./SiteStructure";
 import { Overview } from "./Overview";
 import { HelpButton } from "./HelpButton";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
-import { fixPrompt, planPrompt } from "./ai";
+import { planPrompt } from "./ai";
+import { FixPage, issueKey } from "./FixPage";
 import type { Settings } from "./settings";
 import type { CrawlData, CrawlSummary } from "./crawl";
 import type { Analysis } from "./useAnalysis";
@@ -58,7 +59,6 @@ import {
   hreflangPages,
   indexFilters,
   metaRows,
-  issueRows,
   pageIssues,
   redirectChains,
   schemaFilters,
@@ -98,8 +98,11 @@ export function Reports(p: Props) {
   const { pages, path } = crawl;
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const plan = useAi(p.settings.ai_engine);
-  const [planTitle, setPlanTitle] = useState("");
+  const fix = useAi(p.settings.ai_engine);
+  const [fixKey, setFixKey] = useState<string | null>(null);
   const resetPlan = plan.reset;
+  const resetFix = fix.reset;
+  useEffect(resetFix, [pages, resetFix]);
   useEffect(resetPlan, [pages, resetPlan]); // a plan belongs to the crawl it was written for
   useEffect(() => setSelectedImage(null), [pages]);
 
@@ -159,7 +162,6 @@ export function Reports(p: Props) {
     return [...new Set(titles)];
   }, [pages, crawl.topics]);
   const selectedPage = useMemo(() => pages.find((pg) => pg.url === selected), [pages, selected]);
-  const aiBusy = plan.state.status === "loading";
   const issueTableColumns = useMemo(
     () => [
       ...issueColumns,
@@ -171,14 +173,12 @@ export function Reports(p: Props) {
           <button
             type="button"
             className="row-action"
-            disabled={!p.aiReady || aiBusy}
-            title={p.aiReady ? tr("L'AI scrive la correzione pronta da usare per le pagine di questo problema") : tr(NO_KEY_TEXT)}
+            title={tr("Apri l'anteprima: vedi cosa verrà inviato all'AI prima di avviare")}
             // the row itself opens the report: keep this click and Enter for the button
             onClick={(e) => {
               e.stopPropagation();
-              const issue = c.row.original;
-              setPlanTitle(tr("Soluzione AI: {issue}", { issue: issue.label }));
-              plan.run(fixPrompt(a.host, issue, issueRows(issue, a.snapshot, a.dupRows), pages));
+              setFixKey(issueKey(c.row.original));
+              p.go("fix");
             }}
             onKeyDown={(e) => e.stopPropagation()}
           >
@@ -187,9 +187,8 @@ export function Reports(p: Props) {
         ),
       }),
     ],
-    [p.aiReady, aiBusy, plan.run, a.host, a.snapshot, a.dupRows, pages],
-  );
-  const selectedIssues = useMemo(
+    [p.go],
+  );  const selectedIssues = useMemo(
     () => (selected ? pageIssues(selected, a.snapshot, a.dupRows) : []),
     [selected, a.snapshot, a.dupRows],
   );
@@ -201,7 +200,7 @@ export function Reports(p: Props) {
       {tab === "issues" && plan.state.status !== "idle" && (
         <section className="ai-plan" aria-label={tr("Piano d'azione AI")}>
           <header>
-            <h2>{planTitle}</h2>
+            <h2>{tr("Piano d'azione AI")}</h2>
             <button type="button" className="close" onClick={plan.reset} aria-label={tr("Chiudi piano")}>
               ✕
             </button>
@@ -221,15 +220,25 @@ export function Reports(p: Props) {
               className="secondary"
               disabled={!p.aiReady || a.issues.length === 0 || plan.state.status === "loading"}
               title={p.aiReady ? undefined : tr(NO_KEY_TEXT)}
-              onClick={() => {
-                setPlanTitle(tr("Piano d'azione AI"));
-                plan.run(planPrompt(a.host, pages, withExamples(a.issues, a.snapshot, a.dupRows)));
-              }}
+              onClick={() => plan.run(planPrompt(a.host, pages, withExamples(a.issues, a.snapshot, a.dupRows)))}
             >
               {tr("Piano d'azione AI")}
             </button>
           }
           onRowClick={(i) => p.go(i.tab as Tab, i.filter)}
+        />
+      )}
+      {tab === "fix" && (
+        <FixPage
+          issues={a.issues}
+          snapshot={a.snapshot}
+          dupRows={a.dupRows}
+          pages={pages}
+          host={a.host}
+          engine={p.settings.ai_engine}
+          aiReady={p.aiReady}
+          initial={fixKey}
+          ai={fix}
         />
       )}
       {tab === "internal" && (
@@ -437,7 +446,7 @@ export function Reports(p: Props) {
           }}
         />
       )}
-      {tab !== "images" && tab !== "overview" && tab !== "competitor" && tab !== "gsc" && tab !== "tracker" && selected && path && (
+      {tab !== "images" && tab !== "overview" && tab !== "fix" && tab !== "competitor" && tab !== "gsc" && tab !== "tracker" && selected && path && (
         <DetailPanel
           crawlPath={path}
           url={selected}

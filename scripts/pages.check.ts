@@ -527,7 +527,8 @@ console.log("pages.check: ok");
   assert.ok(text.includes("Title: Old") && !text.includes('Row data: {"url":"https://x.it/a"'));
   assert.ok(text.includes('Row data: {"src":"https://x.it/i0.jpg"'));
   assert.ok(text.includes("Item 15") && !text.includes("Item 16"));
-  assert.ok(text.includes("Only the first 15 of 20"));
+  assert.ok(text.includes("Only 15 of 20"));
+  assert.ok(!fixPrompt("x.it", { ...issue, count: 1 }, [page], [page]).includes("Only"));
   assert.ok(!text.includes("\n\n\n"));
 }
 console.log("fixPrompt: ok");

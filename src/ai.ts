@@ -88,3 +88,31 @@ export function planPrompt(host: string, pages: Page[], issues: (Issue & { examp
     ),
   ].join("\n");
 }
+
+/** Items sent with one "fix it" request, and how much of each non-page row; bounds the prompt. */
+const FIX_ITEMS = 15;
+const ROW_CHARS = 600;
+
+/** Asks for the ready-to-use fix of one issue, item by item. */
+export function fixPrompt(host: string, issue: Issue, rows: Record<string, unknown>[], pages: Page[]): string {
+  const byUrl = new Map(pages.map((p) => [p.url, p]));
+  const items = rows.slice(0, FIX_ITEMS).map((r, i) => {
+    const url = r.url ?? r.page ?? r.source ?? r.src;
+    const page = typeof url === "string" ? byUrl.get(url) : undefined;
+    // rows that are pages already say everything in pageFacts
+    const extra = page === r ? "" : `Row data: ${JSON.stringify(r).slice(0, ROW_CHARS)}`;
+    return [`Item ${i + 1}`, page ? pageFacts(page) : "", extra].filter(Boolean).join("\n");
+  });
+  return [
+    `Fix this SEO issue on ${host}: "${issue.label}" (priority ${issue.priority}, ${issue.count} URLs). Suggested fix: ${issue.fix}`,
+    "For each item, write the fix ready to use: the exact new text or code to paste (a rewritten title or meta description with its",
+    "character count, alt text, H1, redirect rule, JSON-LD, an internal link with its anchor text and where to put it, and so on).",
+    "When the fix can't be written as text (compressing an image, a server setting), give the exact steps.",
+    "Write in the language of each page's own content for any text meant for the page.",
+    issue.count > FIX_ITEMS ? `Only the first ${FIX_ITEMS} of ${issue.count} items are listed: end with how to apply the same fix to the rest.` : "",
+    "",
+    ...items.flatMap((t) => [t, ""]),
+  ]
+    .filter((line, i, all) => line !== "" || all[i - 1] !== "")
+    .join("\n");
+}

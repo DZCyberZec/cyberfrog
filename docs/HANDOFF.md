@@ -2,7 +2,7 @@
 
 Documento per riprendere il lavoro in una nuova chat: chiedi di leggere `docs/HANDOFF.md`, poi [ARCHITECTURE.md](ARCHITECTURE.md) (com'è fatto) e [ROADMAP.md](ROADMAP.md) (cosa manca).
 
-Ultimo aggiornamento: 2026-10-19 (v0.11.1).
+Ultimo aggiornamento: 2026-10-20 (v0.12.0).
 
 ## Cos'è
 
@@ -25,7 +25,7 @@ CyberFrog – Another SEO Tool: crawler SEO e GEO desktop di Daniele Zecca (Cybe
 
 Dettagli di moduli, dati, motori AI e sicurezza: [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Dove siamo (v0.11.1)
+## Dove siamo (v0.12.0)
 
 | Versione | Funzionalità |
 |---|---|
@@ -41,6 +41,7 @@ Dettagli di moduli, dati, motori AI e sicurezza: [ARCHITECTURE.md](ARCHITECTURE.
 | 0.10.0 | **Accesso a Claude Code e Codex dalle Impostazioni** (pulsante "Accedi", senza Terminale, stato aggiornato da solo); **Google Search Console:** accesso Google (OAuth + PKCE, token nel Portachiavi) o service account (opzione avanzata); report con clic, impressioni, CTR e posizione per pagina accanto al crawl, filtri CTR basso / quasi in prima pagina / non trovate dal crawl / senza impressioni, query in cannibalizzazione, riscrittura title e meta con AI |
 | 0.11.0 | **Più account Google** per Search Console (login Google e service account insieme; ogni proprietà usa l'account che la legge, scelta automatica per il sito del crawl); **colonne ridimensionabili** in tutte le tabelle (trascina il bordo, doppio clic adatta al testo, larghezze ricordate per report) con scroll orizzontale; **riepilogo GEO comprimibile** in una riga |
 | 0.11.1 | Ogni account Google può avere un **client OAuth dedicato** (es. il progetto Google Cloud di un cliente) e conserva quello con cui ha fatto l'accesso; barre di scorrimento sempre visibili; pulsante "Comprimi riepilogo" GEO più leggibile |
+| 0.12.0 | **"Risolvi con AI"** su ogni riga dei Problemi: l'AI scrive la correzione pronta per le pagine coinvolte (fino a 15, con i loro dati); **pannello dettaglio ridimensionabile** trascinando il bordo in alto (misura ricordata, doppio clic per tornare a quella iniziale) e con intestazione colorata |
 
 **Verificato dal vivo su cyberzec.it:** salute SEO 82/100, citabilità media 87/100, tutti i crawler AI aperti, llms.txt valido, 8 cluster, 3 casi di cannibalizzazione, 12 link da aggiungere. Claude Code (account Claude Pro) e Codex sono collegati e provati dal vivo; il tracker trova cyberzec.it citato al 1° posto con Claude e al 2° con Codex per "consulenza cybersecurity PMI Senigallia", mentre per "migliori consulenti SEO Marche" l'AI cita solo altri siti.
 

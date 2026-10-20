@@ -142,8 +142,9 @@ export function DataTable<T extends RowData>({
       filters: [{ name: "CSV", extensions: ["csv"] }],
     });
     if (!path) return;
-    const header = table.getAllLeafColumns().map((c) => String(c.columnDef.header ?? c.id));
-    const body = rows.map((r) => r.getAllCells().map((c) => c.getValue()));
+    // action columns (buttons) have no data to export
+    const header = table.getAllLeafColumns().filter((c) => c.accessorFn).map((c) => String(c.columnDef.header ?? c.id));
+    const body = rows.map((r) => r.getAllCells().filter((c) => c.column.accessorFn).map((c) => c.getValue()));
     try {
       await invoke("write_text_file", { path, contents: toCsv(header, body) });
       setExportMsg(rows.length === 1 ? tr("Esportata 1 riga") : tr("Esportate {n} righe", { n: rows.length }));

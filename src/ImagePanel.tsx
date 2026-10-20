@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DataTable, helperFor } from "./DataTable";
 import type { ImageUse } from "./pages";
+import { usePanelHeight } from "./PanelResizer";
 import { tr, trError } from "./i18n";
 
 const use = helperFor<ImageUse>();
@@ -29,6 +30,7 @@ type Props = {
 
 /** The pages that show one image, with the alt text each of them uses. */
 export function ImagePanel({ crawlPath, src, onClose, onOpenPage }: Props) {
+  const panel = usePanelHeight();
   const [uses, setUses] = useState<ImageUse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +50,8 @@ export function ImagePanel({ crawlPath, src, onClose, onOpenPage }: Props) {
   const file = src.split("/").pop()?.split("?")[0] || "immagine";
 
   return (
-    <section className="detail" aria-label={tr("Pagine che usano {src}", { src })}>
+    <section className="detail" ref={panel.ref} style={panel.style} aria-label={tr("Pagine che usano {src}", { src })}>
+      {panel.handle}
       <header className="detail-head">
         <nav className="tabs" aria-label={tr("Uso dell'immagine")}>
           <span className="tab-static">

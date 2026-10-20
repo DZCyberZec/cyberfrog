@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DataTable, helperFor } from "./DataTable";
 import { codeLabel, kindOf, type IssueDef, type LinkRow, type Page, type PageLinks } from "./pages";
+import { usePanelHeight } from "./PanelResizer";
 import { tr, trError } from "./i18n";
 import { AiOutput, NO_KEY_TEXT, useAi } from "./AiAssist";
 import { explainPrompt, metaPrompt } from "./ai";
@@ -37,6 +38,7 @@ type Props = {
 
 /** Inlinks and outlinks of one crawled URL, loaded on demand from the crawl file. */
 export function DetailPanel({ crawlPath, url, page, issues, aiEngine, aiReady, onClose, onNavigate }: Props) {
+  const panel = usePanelHeight();
   const [links, setLinks] = useState<PageLinks | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"inlinks" | "outlinks" | "ai">("inlinks");
@@ -60,7 +62,8 @@ export function DetailPanel({ crawlPath, url, page, issues, aiEngine, aiReady, o
   const slug = new URL(url).pathname.replace(/\W+/g, "-").replace(/^-|-$/g, "") || "home";
 
   return (
-    <section className="detail" aria-label={tr("Dettaglio di {url}", { url })}>
+    <section className="detail" ref={panel.ref} style={panel.style} aria-label={tr("Dettaglio di {url}", { url })}>
+      {panel.handle}
       <header className="detail-head">
         <nav className="tabs" role="tablist" aria-label={tr("Link della pagina")}>
           <button type="button" role="tab" aria-selected={view === "inlinks"} onClick={() => setView("inlinks")}>

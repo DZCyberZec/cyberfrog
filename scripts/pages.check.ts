@@ -10,7 +10,7 @@ const {
 } = await import("../src/pages.ts");
 const { hasTranslation } = await import("../src/i18n.ts");
 const { pageIssues, withExamples } = await import("../src/pages.ts");
-const { systemPrompt, metaPrompt, explainPrompt, planPrompt } = await import("../src/ai.ts");
+const { systemPrompt, metaPrompt, explainPrompt, planPrompt, fixPrompt } = await import("../src/ai.ts");
 const { healthScore } = await import("../src/health.ts");
 const { TOPIC_FILTERS, topicFindings, REASON_LABEL } = await import("../src/topics.ts");
 const { summarize, metricRows, competitorActions } = await import("../src/competitor.ts");
@@ -517,3 +517,18 @@ assert.deepEqual(parseQueries(" a \n\nb\na\n"), ["a", "b"]);
   assert.equal(matchProperty(sites("https://other.it/"), "x.it"), null);
 }
 console.log("pages.check: ok");
+
+// fixPrompt: page rows use the page facts, other rows their own data; long lists are capped and say so
+{
+  const page = { ...base, url: "https://x.it/a", title: "Old" };
+  const issue = { tab: "title", filter: "dup", priority: "Media" as const, label: "Title duplicati", fix: "Rendi unico", count: 20 };
+  const rows = [page, ...Array.from({ length: 19 }, (_, i) => ({ src: `https://x.it/i${i}.jpg`, size: 9 }))];
+  const text = fixPrompt("x.it", issue, rows, [page]);
+  assert.ok(text.includes("Title: Old") && !text.includes('Row data: {"url":"https://x.it/a"'));
+  assert.ok(text.includes('Row data: {"src":"https://x.it/i0.jpg"'));
+  assert.ok(text.includes("Item 15") && !text.includes("Item 16"));
+  assert.ok(text.includes("Only the first 15 of 20"));
+  assert.ok(!text.includes("\n\n\n"));
+}
+console.log("fixPrompt: ok");
+

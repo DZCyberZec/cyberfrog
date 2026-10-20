@@ -665,6 +665,13 @@ export function withExamples(issues: Issue[], d: CrawlSnapshot, dups: DupPage[] 
   });
 }
 
+/** The rows behind one issue (pages, images, links…), as its report lists them. */
+export function issueRows(issue: IssueDef, d: CrawlSnapshot, dups: DupPage[] = []): Record<string, unknown>[] {
+  const report = crawlReports(d, dups)[issue.tab];
+  const filter = report?.filters.find((f) => f.id === issue.filter);
+  return filter ? report.rows.filter(filter.test) : [];
+}
+
 function crawlReports(d: CrawlSnapshot, dups: DupPage[]): Reports {
   const schema = schemaPages(d.pages, d.structured);
   const geo = d.geo ?? EMPTY_GEO;

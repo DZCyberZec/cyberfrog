@@ -1,6 +1,6 @@
 # CyberFrog — roadmap
 
-Cosa manca, in ordine di priorità. Aggiornata al 2026-10-19 (v0.11.1). Ciò che è già fatto è in [HANDOFF.md](HANDOFF.md); com'è costruito in [ARCHITECTURE.md](ARCHITECTURE.md).
+Cosa manca, in ordine di priorità. Aggiornata al 2026-10-20 (v0.12.0). Ciò che è già fatto è in [HANDOFF.md](HANDOFF.md); com'è costruito in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## 1. Prossimi lavori (chiesti dall'utente)
 
@@ -24,7 +24,7 @@ Il file ha circa 2700 righe: va diviso in `crawler/` con fetch, parse, store, re
 - **Più competitor** a confronto, e monitoraggio periodico dei loro nuovi argomenti.
 - **Header di sicurezza e contenuto misto:** HSTS, CSP, X-Frame-Options, risorse http su pagine https.
 - **PageSpeed Insights / Core Web Vitals** per URL (serve una chiave API Google).
-- **Assistente AI in blocco:** title e meta suggeriti per tutte le pagine con problemi, esportabili in CSV.
+- **Assistente AI in blocco:** title e meta suggeriti per tutte le pagine con problemi, esportabili in CSV (oggi "Risolvi con AI" lavora su 15 pagine per volta e risponde in testo). Per correzioni sul contenuto (es. paragrafo di risposta in apertura) passare all'AI anche il testo della pagina.
 - **Grafo visuale dei link interni**, colorato per Link Score o argomento.
 - **Leggibilità, ortografia, accessibilità** di base (lang, label, contrasto).
 - **Stemming leggero italiano/inglese** per gli argomenti, così "servizio" e "servizi" contano come la stessa parola.
